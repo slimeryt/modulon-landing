@@ -18,6 +18,7 @@ data/*.sqlite-wal
 Thumbs.db
 
 # Python
+.venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/

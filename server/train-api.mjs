@@ -181,11 +181,23 @@ let autoTrainTimer = null;
 /** When true, a new `train.py` run starts after the current one exits (until /train/stop or manual start). */
 let continuousTraining = false;
 
-/** Prefer PYTHON; on Linux/macOS use python3 (many images have no `python` symlink). */
-const pythonExe = () => {
-  if (process.env.PYTHON?.trim()) return process.env.PYTHON.trim();
+/**
+ * Python for `train.py`: PYTHON env, then project `.venv`, then `/usr/bin/python3` (Railway apt),
+ * else `python3` / `python` on PATH.
+ */
+function pythonExe() {
+  const fromEnv = process.env.PYTHON?.trim();
+  if (fromEnv) return fromEnv;
+  const root = path.join(__dirname, '..');
+  const venvPy =
+    process.platform === 'win32'
+      ? path.join(root, '.venv', 'Scripts', 'python.exe')
+      : path.join(root, '.venv', 'bin', 'python');
+  if (fs.existsSync(venvPy)) return venvPy;
+  const usr = '/usr/bin/python3';
+  if (process.platform !== 'win32' && fs.existsSync(usr)) return usr;
   return process.platform === 'win32' ? 'python' : 'python3';
-};
+}
 
 function pushLog(text) {
   for (const line of String(text).split(/\r?\n/)) {
@@ -283,7 +295,7 @@ function onTrainProcessError(err) {
   pushLog(`[train-api] spawn error: ${err.message}`);
   if (err && err.code === 'ENOENT') {
     pushLog(
-      '[train-api] No Python on PATH (ENOENT). Railway: ensure nixpacks.toml is deployed and rebuild finished; or set PYTHON to your interpreter. Local: install Python 3.',
+      '[train-api] No Python on PATH (ENOENT). Railway: redeploy with nixpacks.toml (apt python3 + .venv); check deploy logs for pip errors. Set PYTHON to a full path if needed. Local: install Python 3.',
     );
   }
   lastRun = {
@@ -596,6 +608,7 @@ app.listen(PORT, '0.0.0.0', () => {
   }
   console.log(`train-api listening on http://127.0.0.1:${PORT}`);
   console.log(`chat sqlite: ${CHAT_DB_PATH}`);
+  console.log(`train python: ${pythonExe()}`);
   if (!SECRET) {
     console.warn('train-api: ADMIN_TRAIN_SECRET not set — /api/train is open to this machine');
   }
