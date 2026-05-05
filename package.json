@@ -4,13 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "npm rebuild better-sqlite3",
     "dev": "vite",
     "dev:api": "node server/train-api.mjs",
     "dev:all": "concurrently -k -n vite,api -c blue,magenta \"vite\" \"node server/train-api.mjs\"",
     "start": "node server/train-api.mjs",
     "train:overnight": "python chatbot-ai/scripts/overnight_train.py",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "rebuild:native": "npm rebuild better-sqlite3"
   },
   "engines": {
     "node": ">=20"

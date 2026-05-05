@@ -10,7 +10,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CHATBOT_ROOT = path.resolve(__dirname, '../chatbot-ai');
 const TRAIN_CONFIG_PATH = path.join(CHATBOT_ROOT, 'models', 'train_config.json');
 const BEST_METRICS_PATH = path.join(CHATBOT_ROOT, 'models', 'best_metrics.json');
-const CHAT_DB_PATH = path.join(__dirname, '..', 'data', 'chat.sqlite');
+/**
+ * Chat DB is SQLite (single file). Local default: project `data/chat.sqlite`.
+ * On Railway, if you mount persistent storage at `/app/data`, we default to
+ * `/app/data/chat.sqlite` when `RAILWAY_ENVIRONMENT` is set (override with CHAT_DB_PATH).
+ */
+const CHAT_DB_PATH = (() => {
+  const raw = process.env.CHAT_DB_PATH?.trim();
+  if (raw) {
+    return path.isAbsolute(raw) ? raw : path.resolve(__dirname, '..', raw);
+  }
+  if (process.env.RAILWAY_ENVIRONMENT) {
+    return '/app/data/chat.sqlite';
+  }
+  return path.join(__dirname, '..', 'data', 'chat.sqlite');
+})();
 
 const CHAT_WELCOME =
   'Hi. This is a chat prototype. Send a message—the server returns a placeholder until you wire up the model.';
@@ -115,6 +129,27 @@ function writeTrainConfig(cfg) {
   fs.mkdirSync(path.dirname(TRAIN_CONFIG_PATH), { recursive: true });
   fs.writeFileSync(TRAIN_CONFIG_PATH, `${JSON.stringify(cfg, null, 2)}\n`, 'utf8');
 }
+
+/** @returns {{ best_loss: number, best_epoch: number, updatedAt: string } | null} */
+function readBestMetrics() {
+  if (!fs.existsSync(BEST_METRICS_PATH)) return null;
+  try {
+    const raw = JSON.parse(fs.readFileSync(BEST_METRICS_PATH, 'utf8'));
+    if (!raw || typeof raw !== 'object') return null;
+    const loss = Number(raw.best_loss);
+    const epoch = Number(raw.best_epoch);
+    if (!Number.isFinite(loss) || !Number.isFinite(epoch)) return null;
+    const st = fs.statSync(BEST_METRICS_PATH);
+    return {
+      best_loss: loss,
+      best_epoch: Math.trunc(epoch),
+      updatedAt: st.mtime.toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Railway and other hosts set PORT; local dev can use TRAIN_API_PORT (e.g. 5182). */
 const PORT = Number(process.env.PORT || process.env.TRAIN_API_PORT || 5182);
 const SECRET = process.env.ADMIN_TRAIN_SECRET || '';
@@ -518,6 +553,8 @@ if (fs.existsSync(DIST_DIR)) {
   app.use(express.static(DIST_DIR));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
+    // Missing built files must 404 — do not send HTML (breaks CSS/JS MIME and "styles don't load").
+    if (path.extname(req.path)) return next();
     res.sendFile(path.join(DIST_DIR, 'index.html'));
   });
 }

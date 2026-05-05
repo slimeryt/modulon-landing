@@ -203,22 +203,6 @@ export default function ChatPage() {
     }
   };
 
-  const fmtTime = (iso) => {
-    if (!iso) return '';
-    try {
-      const d = new Date(iso.replace(' ', 'T') + 'Z');
-      if (Number.isNaN(d.getTime())) return iso;
-      return d.toLocaleString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return iso;
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#070708] text-white font-sans selection:bg-white/20">
       <div className="fixed inset-0 pointer-events-none opacity-[0.35] bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(120,119,198,0.2),transparent)]" />
@@ -313,20 +297,17 @@ export default function ChatPage() {
                   selectConversation(c.id);
                 }
               }}
-              className={`group relative w-full text-left rounded-xl px-3 py-2.5 pr-9 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/25 ${
+              className={`group relative w-full text-left rounded-xl px-3 py-2 pr-9 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/25 ${
                 conversationId === c.id
                   ? 'bg-white/[0.1] border border-white/15'
                   : 'border border-transparent hover:bg-white/[0.05]'
               }`}
             >
               <p className="text-sm text-white/90 line-clamp-2 leading-snug">{c.title}</p>
-              <p className="text-[10px] font-mono text-white/30 mt-1">
-                {fmtTime(c.updated_at)} · {c.message_count ?? 0} msgs
-              </p>
               <button
                 type="button"
                 onClick={(e) => deleteConversation(c.id, e)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-white/25 hover:text-red-300 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 md:opacity-100 transition-opacity"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-white/35 hover:text-red-300 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                 aria-label="Delete chat"
               >
                 <Trash2 className="w-3.5 h-3.5" aria-hidden />
@@ -334,8 +315,11 @@ export default function ChatPage() {
             </div>
           ))}
         </div>
-        <p className="shrink-0 text-[10px] text-white/25 px-3 py-2 border-t border-white/[0.06] font-mono truncate" title="Stored in SQLite on the train API">
-          SQLite · local
+        <p
+          className="shrink-0 text-[10px] text-white/25 px-3 py-2 border-t border-white/[0.06] font-mono truncate"
+          title="Chats are stored in a SQLite file on this server. On Railway, mount a volume and set CHAT_DB_PATH to a path inside that volume."
+        >
+          SQLite
         </p>
       </aside>
 

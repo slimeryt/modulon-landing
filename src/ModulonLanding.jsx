@@ -344,10 +344,7 @@ function Hero() {
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 pt-24 pb-16 w-full flex items-center">
         <div className="flex-1 max-w-xl">
-          <h1
-            className="text-6xl md:text-7xl font-bold tracking-tight leading-none text-white mb-6"
-            style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-          >
+          <h1 className="text-6xl md:text-7xl font-bold tracking-tight leading-none text-white mb-6 font-sans">
             <span
               style={{
                 background: 'linear-gradient(135deg, #ffffff 30%, rgba(255,255,255,0.45))',
@@ -445,10 +442,6 @@ function Footer() {
 export default function ModulonLanding() {
   return (
     <div className="bg-[#0a0a0a] min-h-screen font-sans antialiased">
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-      `}</style>
-
       <Navbar />
       <Hero />
       <Footer />
