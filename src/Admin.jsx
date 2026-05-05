@@ -18,6 +18,7 @@ import {
   Settings2,
   Square,
   Terminal,
+  Trophy,
   XCircle,
   Zap,
 } from 'lucide-react';
@@ -122,6 +123,7 @@ export default function Admin() {
   const [trainConfigPath, setTrainConfigPath] = useState(null);
   const [savingHparams, setSavingHparams] = useState(false);
   const [hParamMsg, setHParamMsg] = useState('');
+  const [bestMetrics, setBestMetrics] = useState(null);
   const logRef = useRef(null);
 
   const poll = useCallback(async () => {
@@ -135,6 +137,7 @@ export default function Admin() {
       setLastRun(s.lastRun ?? null);
       setLogLineCount(s.logLineCount ?? 0);
       setMeta(s.meta ?? null);
+      setBestMetrics(s.bestMetrics ?? null);
       setErr('');
       setApiOk(true);
     } catch (e) {
@@ -561,6 +564,52 @@ export default function Admin() {
                     ) : null}
                   </p>
                 ) : null}
+              </div>
+            </Card>
+
+            <Card className="p-5 sm:p-6 overflow-hidden relative border-amber-500/15">
+              <div className="absolute top-0 right-0 w-40 h-40 rounded-full blur-3xl opacity-20 -translate-y-1/2 translate-x-1/2 bg-amber-400" />
+              <div className="relative flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Trophy className="w-4 h-4 text-amber-300/90 shrink-0" aria-hidden />
+                    <span className="text-[11px] font-mono uppercase tracking-widest text-white/40">
+                      All-time best
+                    </span>
+                  </div>
+                </div>
+                {bestMetrics ? (
+                  <>
+                    <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                      <p className="text-2xl font-semibold tabular-nums text-white tracking-tight">
+                        loss{' '}
+                        <span className="text-amber-200/95 font-mono">
+                          {bestMetrics.best_loss.toFixed(4)}
+                        </span>
+                      </p>
+                      <p className="text-sm text-white/55">
+                        epoch{' '}
+                        <span className="text-white/85 font-mono tabular-nums">
+                          {bestMetrics.best_epoch}
+                        </span>
+                      </p>
+                    </div>
+                    {bestMetrics.updatedAt ? (
+                      <p className="text-[11px] text-white/30 font-mono">
+                        tracker updated {new Date(bestMetrics.updatedAt).toLocaleString()}
+                      </p>
+                    ) : null}
+                    <p className="text-[11px] text-white/35 font-mono truncate" title={meta?.cwd}>
+                      {meta?.cwd ? `${meta.cwd.replace(/\\/g, '/')}/models/best_metrics.json` : 'models/best_metrics.json'}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm text-white/45 leading-relaxed">
+                    No <code className="text-white/55">best_metrics.json</code> yet. Start training;
+                    the best validation loss and epoch are written when the run beats the previous
+                    best.
+                  </p>
+                )}
               </div>
             </Card>
 

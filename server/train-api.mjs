@@ -9,6 +9,7 @@ import { createChatStore, openChatDatabase } from './chat-db.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CHATBOT_ROOT = path.resolve(__dirname, '../chatbot-ai');
 const TRAIN_CONFIG_PATH = path.join(CHATBOT_ROOT, 'models', 'train_config.json');
+const BEST_METRICS_PATH = path.join(CHATBOT_ROOT, 'models', 'best_metrics.json');
 const CHAT_DB_PATH = path.join(__dirname, '..', 'data', 'chat.sqlite');
 
 const CHAT_WELCOME =
@@ -320,6 +321,7 @@ function statusPayload() {
     lastRun,
     logLineCount: logLines.length,
     log: tail.join('\n'),
+    bestMetrics: readBestMetrics(),
     meta: {
       cwd: CHATBOT_ROOT,
       command: `${pythonExe()} -u src/train.py`,

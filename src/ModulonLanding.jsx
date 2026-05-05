@@ -368,10 +368,13 @@ function Hero() {
           </p>
 
           <div className="flex items-center gap-4 flex-wrap">
-            <button className="bg-white text-black font-semibold px-6 py-3 rounded-md hover:bg-white/90 transition-all duration-200 cursor-pointer flex items-center gap-2 text-sm">
+            <Link
+              to="/chat"
+              className="bg-white text-black font-semibold px-6 py-3 rounded-md hover:bg-white/90 transition-all duration-200 cursor-pointer flex items-center gap-2 text-sm"
+            >
               Start Chatting
               <ArrowRight className="w-4 h-4" />
-            </button>
+            </Link>
             <button className="border border-white/20 text-white/70 font-medium px-6 py-3 rounded-md hover:border-white/50 hover:text-white transition-all duration-200 cursor-pointer flex items-center gap-2 text-sm">
               <Github className="w-4 h-4" />
               View Source
