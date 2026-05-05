@@ -1,4 +1,5 @@
 import cors from 'cors';
+import dotenv from 'dotenv';
 import express from 'express';
 import { execFile, spawn } from 'child_process';
 import fs from 'fs';
@@ -7,6 +8,9 @@ import { fileURLToPath } from 'url';
 import { createChatStore, openChatDatabase } from './chat-db.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Node does not load `.env` by itself (Vite does for the client only).
+dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
+
 const CHATBOT_ROOT = path.resolve(__dirname, '../chatbot-ai');
 const TRAIN_CONFIG_PATH = path.join(CHATBOT_ROOT, 'models', 'train_config.json');
 const BEST_METRICS_PATH = path.join(CHATBOT_ROOT, 'models', 'best_metrics.json');
@@ -177,7 +181,11 @@ let autoTrainTimer = null;
 /** When true, a new `train.py` run starts after the current one exits (until /train/stop or manual start). */
 let continuousTraining = false;
 
-const pythonExe = () => process.env.PYTHON || 'python';
+/** Prefer PYTHON; on Linux/macOS use python3 (many images have no `python` symlink). */
+const pythonExe = () => {
+  if (process.env.PYTHON?.trim()) return process.env.PYTHON.trim();
+  return process.platform === 'win32' ? 'python' : 'python3';
+};
 
 function pushLog(text) {
   for (const line of String(text).split(/\r?\n/)) {
@@ -273,6 +281,11 @@ function onTrainProcessClosed(code, signal) {
 
 function onTrainProcessError(err) {
   pushLog(`[train-api] spawn error: ${err.message}`);
+  if (err && err.code === 'ENOENT') {
+    pushLog(
+      '[train-api] No Python on PATH (ENOENT). Railway: ensure nixpacks.toml is deployed and rebuild finished; or set PYTHON to your interpreter. Local: install Python 3.',
+    );
+  }
   lastRun = {
     startedAt: currentStartedAt,
     endedAt: new Date().toISOString(),
@@ -482,12 +495,17 @@ app.get('/api/chat/conversations/:id/messages', requireAuth, (req, res) => {
   if (!Number.isFinite(id) || id < 1) {
     return res.status(400).json({ error: 'invalid conversation id' });
   }
-  const chat = getChatStore();
-  if (!chat.conversationExists(id)) {
-    return res.status(404).json({ error: 'conversation not found' });
+  try {
+    const chat = getChatStore();
+    if (!chat.conversationExists(id)) {
+      return res.status(404).json({ error: 'conversation not found' });
+    }
+    const messages = chat.getMessages(id);
+    res.json({ conversationId: id, messages });
+  } catch (e) {
+    console.error('[chat] GET messages', e);
+    res.status(500).json({ error: String(e?.message || e) });
   }
-  const messages = chat.getMessages(id);
-  res.json({ conversationId: id, messages });
 });
 
 app.post('/api/chat/conversations', requireAuth, (_req, res) => {
@@ -519,9 +537,14 @@ app.patch('/api/chat/conversations/:id', requireAuth, (req, res) => {
   if (!Number.isFinite(id) || id < 1) {
     return res.status(400).json({ error: 'invalid conversation id' });
   }
-  const ok = getChatStore().renameConversation(id, req.body?.title);
-  if (!ok) return res.status(400).json({ error: 'invalid title' });
-  res.json({ ok: true });
+  try {
+    const ok = getChatStore().renameConversation(id, req.body?.title);
+    if (!ok) return res.status(400).json({ error: 'invalid title' });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[chat] PATCH conversation', e);
+    res.status(500).json({ error: String(e?.message || e) });
+  }
 });
 
 /** Prototype chat: persists to SQLite; replace reply with Python inference when ready. */
@@ -533,19 +556,24 @@ app.post('/api/chat', requireAuth, (req, res) => {
   let convId = req.body?.conversationId;
   convId =
     convId != null && convId !== '' ? parseInt(String(convId), 10) : Number.NaN;
-  const chat = getChatStore();
-  if (!Number.isFinite(convId) || convId < 1) {
-    convId = chat.createConversation();
-    chat.appendMessage(convId, 'assistant', CHAT_WELCOME, 0);
-  } else if (!chat.conversationExists(convId)) {
-    return res.status(404).json({ error: 'conversation not found' });
+  try {
+    const chat = getChatStore();
+    if (!Number.isFinite(convId) || convId < 1) {
+      convId = chat.createConversation();
+      chat.appendMessage(convId, 'assistant', CHAT_WELCOME, 0);
+    } else if (!chat.conversationExists(convId)) {
+      return res.status(404).json({ error: 'conversation not found' });
+    }
+    chat.maybeSetTitleFromFirstUser(convId, msg);
+    chat.appendMessage(convId, 'user', msg, 0);
+    const preview = msg.length > 160 ? `${msg.slice(0, 160)}...` : msg;
+    const reply = `Prototype: received your message (${preview}). Next step: call inference from this route or a dedicated chat service.`;
+    chat.appendMessage(convId, 'assistant', reply, 1);
+    res.json({ prototype: true, reply, conversationId: convId });
+  } catch (e) {
+    console.error('[chat] POST /api/chat', e);
+    res.status(500).json({ error: String(e?.message || e) });
   }
-  chat.maybeSetTitleFromFirstUser(convId, msg);
-  chat.appendMessage(convId, 'user', msg, 0);
-  const preview = msg.length > 160 ? `${msg.slice(0, 160)}...` : msg;
-  const reply = `Prototype: received your message (${preview}). Next step: call inference from this route or a dedicated chat service.`;
-  chat.appendMessage(convId, 'assistant', reply, 1);
-  res.json({ prototype: true, reply, conversationId: convId });
 });
 
 const DIST_DIR = path.join(__dirname, '..', 'dist');
@@ -560,7 +588,12 @@ if (fs.existsSync(DIST_DIR)) {
 }
 
 app.listen(PORT, '0.0.0.0', () => {
-  getChatStore();
+  try {
+    getChatStore();
+  } catch (e) {
+    console.error('[fatal] could not open chat sqlite:', CHAT_DB_PATH, e);
+    process.exit(1);
+  }
   console.log(`train-api listening on http://127.0.0.1:${PORT}`);
   console.log(`chat sqlite: ${CHAT_DB_PATH}`);
   if (!SECRET) {

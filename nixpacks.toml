@@ -1,0 +1,16 @@
+# Railway (Nixpacks): Node images have no Python — admin "Start training" needs it.
+# First build installs PyTorch + deps (slow/large). Train locally if deploys time out.
+[phases.setup]
+nixPkgs = ["python311"]
+
+[phases.install]
+cmds = [
+  "npm install",
+  "python3 -m venv .venv",
+  ".venv/bin/pip install -U pip",
+  ".venv/bin/pip install -r chatbot-ai/requirements.txt",
+]
+
+# Use the venv at runtime so deps are visible when the API spawns training.
+[variables]
+PYTHON = "/app/.venv/bin/python"

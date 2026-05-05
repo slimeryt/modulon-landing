@@ -6,10 +6,20 @@ import path from 'path';
  * @param {string} filePath
  * @returns {import('better-sqlite3').Database}
  */
+function resolveJournalMode() {
+  const raw = (process.env.SQLITE_JOURNAL_MODE || '').trim().toUpperCase();
+  if (raw === 'DELETE' || raw === 'TRUNCATE' || raw === 'PERSIST' || raw === 'WAL') {
+    return raw;
+  }
+  // WAL creates -wal/-shm siblings; some cloud volume mounts misbehave with them.
+  if (process.env.RAILWAY_ENVIRONMENT) return 'DELETE';
+  return 'WAL';
+}
+
 export function openChatDatabase(filePath) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const db = new Database(filePath);
-  db.pragma('journal_mode = WAL');
+  db.pragma(`journal_mode = ${resolveJournalMode()}`);
   db.pragma('foreign_keys = ON');
   db.exec(`
     CREATE TABLE IF NOT EXISTS conversations (
