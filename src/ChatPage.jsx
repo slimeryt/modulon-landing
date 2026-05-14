@@ -325,7 +325,9 @@ export default function ChatPage() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [err, setErr] = useState('');
   const [apiOk, setApiOk] = useState(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
+  );
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState('account');
   const [settingsNotice, setSettingsNotice] = useState('');
@@ -815,8 +817,60 @@ export default function ChatPage() {
     <div className="h-screen overflow-hidden bg-zinc-100 text-zinc-900 dark:bg-[#070708] dark:text-white font-sans selection:bg-zinc-300/40 dark:selection:bg-white/20">
       <div className="fixed inset-0 pointer-events-none opacity-20 dark:opacity-[0.35] bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(120,119,198,0.2),transparent)]" />
 
+      {/* Mobile: full-width header so controls stay out of the message column. */}
+      <header
+        className="flex md:hidden fixed inset-x-0 top-0 z-40 items-center justify-between gap-3 border-b border-zinc-200/75 bg-zinc-100/95 px-3 shadow-sm backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#070708]/95 dark:shadow-[0_1px_0_rgba(255,255,255,0.04)]"
+        style={{
+          paddingTop: 'max(0.5rem, env(safe-area-inset-top, 0px))',
+          paddingBottom: '0.5rem',
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setSidebarOpen((o) => !o)}
+          className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-zinc-200/80 text-zinc-800 transition-colors active:scale-[0.98] hover:bg-zinc-300/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 dark:bg-white/[0.1] dark:text-white dark:hover:bg-white/[0.16] dark:focus-visible:ring-white/30"
+          aria-expanded={sidebarOpen}
+          aria-label="Toggle chat history"
+        >
+          <PanelLeft className="h-5 w-5" aria-hidden />
+        </button>
+        <div className="flex min-w-0 flex-1 items-center justify-center px-2">
+          <span className="truncate text-center text-xs font-semibold tracking-wide text-zinc-500 dark:text-white/45">
+            Modulon
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <span
+            className="flex h-10 w-9 shrink-0 items-center justify-center"
+            title={
+              apiOk === true ? 'API connected' : apiOk === false ? 'API offline' : 'Checking API…'
+            }
+            aria-label={
+              apiOk === true ? 'API connected' : apiOk === false ? 'API offline' : 'Checking API'
+            }
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${
+                apiOk === true
+                  ? 'bg-emerald-500 shadow-[0_0_0_2px_rgba(16,185,129,0.28)] dark:shadow-[0_0_0_2px_rgba(16,185,129,0.22)]'
+                  : apiOk === false
+                    ? 'bg-red-500 shadow-[0_0_0_2px_rgba(239,68,68,0.22)] dark:shadow-[0_0_0_2px_rgba(239,68,68,0.16)]'
+                    : 'bg-amber-400 animate-pulse dark:bg-amber-400/90'
+              }`}
+            />
+          </span>
+          <Link
+            to="/"
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-zinc-200/80 text-zinc-800 transition-colors active:scale-[0.98] hover:bg-zinc-300/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 dark:bg-white/[0.1] dark:text-white dark:hover:bg-white/[0.16] dark:focus-visible:ring-white/30"
+            aria-label="Home"
+          >
+            <Home className="h-5 w-5" aria-hidden />
+          </Link>
+        </div>
+      </header>
+
       <div
-        className="fixed z-40 flex items-center gap-0.5 rounded-full border border-zinc-200/90 bg-white/90 py-1 pl-1 pr-1 shadow-sm backdrop-blur-md dark:border-white/[0.12] dark:bg-white/[0.08] dark:shadow-[0_8px_30px_-8px_rgba(0,0,0,0.65)] max-md:backdrop-blur-xl"
+        className="hidden md:flex fixed z-40 items-center gap-0.5 rounded-full border border-zinc-200/90 bg-white/90 py-1 pl-1 pr-1 shadow-sm backdrop-blur-md dark:border-white/[0.12] dark:bg-white/[0.08] dark:shadow-[0_8px_30px_-8px_rgba(0,0,0,0.65)]"
         style={{
           top: 'max(0.75rem, env(safe-area-inset-top, 0px))',
           right: 'max(0.75rem, env(safe-area-inset-right, 0px))',
@@ -863,7 +917,7 @@ export default function ChatPage() {
 
       {/* Sidebar column: md+ narrows width when closed; same full height as open. Mobile still slides off. */}
       <div
-        className={`fixed z-30 flex flex-col overflow-hidden transition-[width,transform] duration-200 ease-out ${
+        className={`fixed z-30 max-md:z-50 flex flex-col overflow-hidden transition-[width,transform] duration-200 ease-out ${
           sidebarOpen ? 'gap-2' : 'gap-2 md:gap-1.5'
         } ${
           sidebarOpen
@@ -1035,7 +1089,7 @@ export default function ChatPage() {
           sidebarOpen
             ? 'max-md:translate-x-[calc(min(18rem,calc(100vw-2rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)))-2.75rem)]'
             : 'max-md:translate-x-0'
-        } max-md:pb-[max(1rem,env(safe-area-inset-bottom,0px))] max-md:pt-[max(1rem,calc(env(safe-area-inset-top,0px)+3.75rem))]`}
+        } max-md:pb-[max(1rem,env(safe-area-inset-bottom,0px))] max-md:pt-[max(0.5rem,calc(env(safe-area-inset-top,0px)+3.5rem))]`}
       >
         <div className="max-w-2xl mx-auto flex flex-col h-full">
         {loadingMessages && conversationId ? (
