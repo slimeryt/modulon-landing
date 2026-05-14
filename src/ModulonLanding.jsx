@@ -306,11 +306,11 @@ function RotatingTypingText({
 
   return (
     <p
-      className="text-xl md:text-2xl text-zinc-600 dark:text-white/85 font-mono tracking-tight mb-6 min-h-[2.5rem] md:min-h-[3rem]"
+      className="mb-6 min-h-[2.5rem] font-mono text-lg font-medium tracking-tight text-zinc-900 dark:text-white md:min-h-[3rem] md:text-2xl md:font-normal md:text-zinc-600 md:dark:text-white/85"
       aria-live="polite"
     >
       {line}
-      <span className="inline-block w-[2px] h-[1.05em] ml-0.5 bg-zinc-800/60 align-[-0.1em] animate-pulse dark:bg-white/70" />
+      <span className="ml-0.5 inline-block h-[1.05em] w-[2px] animate-pulse bg-zinc-900 align-[-0.1em] dark:bg-white md:bg-zinc-800/60 md:dark:bg-white/70" />
     </p>
   );
 }
@@ -437,16 +437,16 @@ function Hero() {
       />
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 pt-24 pb-16 w-full flex items-center">
-        <div className="flex-1 max-w-xl">
-          <h1 className="text-6xl md:text-7xl font-bold tracking-tight leading-none mb-6 font-sans">
-            <span className="bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-500 bg-clip-text text-transparent dark:from-white dark:via-white dark:to-white/45">
+        <div className="relative z-20 flex-1 max-w-xl max-md:rounded-2xl max-md:border max-md:border-zinc-200/50 max-md:bg-zinc-100/88 max-md:px-4 max-md:py-6 max-md:shadow-[0_12px_40px_-20px_rgba(0,0,0,0.12)] max-md:backdrop-blur-md dark:max-md:border-white/[0.08] dark:max-md:bg-[#080808]/82 dark:max-md:shadow-[0_16px_48px_-24px_rgba(0,0,0,0.85)] md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-blur-none md:rounded-none">
+          <h1 className="text-5xl max-[380px]:text-[2.65rem] sm:text-6xl md:text-7xl font-bold tracking-tight leading-none mb-6 font-sans">
+            <span className="text-zinc-950 dark:text-white max-md:drop-shadow-[0_1px_2px_rgba(0,0,0,0.08)] md:bg-gradient-to-br md:from-zinc-900 md:via-zinc-800 md:to-zinc-500 md:bg-clip-text md:text-transparent md:drop-shadow-none dark:md:from-white dark:md:via-white dark:md:to-white/45">
               Modulon.
             </span>
           </h1>
 
           <RotatingTypingText phrases={HERO_TYPING_PHRASES} />
 
-          <p className="text-zinc-600 dark:text-white/50 text-lg leading-relaxed mb-10 max-w-md">
+          <p className="mb-10 max-w-md text-base leading-relaxed text-zinc-800 dark:text-white/92 sm:text-lg md:text-lg md:text-zinc-600 md:dark:text-white/50">
             An AI chatbot trained entirely from scratch on real human conversation —
             no pretrained weights, no black-box APIs. Just raw dialogue, a neural network,
             and time.
@@ -479,11 +479,7 @@ function Hero() {
       </div>
 
       <div
-        className="fixed z-[1] right-0 top-1/2 pointer-events-none select-none"
-        style={{
-          transform:
-            'translateY(-50%) translateX(max(28%, calc(64px + 8vw)))',
-        }}
+        className="fixed z-[1] right-0 top-1/2 origin-[96%_48%] -translate-y-[46%] translate-x-[clamp(2.25rem,56vw,21rem)] scale-[0.46] select-none pointer-events-none md:-translate-y-1/2 md:translate-x-[max(28%,calc(64px+8vw))] md:scale-100 md:origin-center"
       >
         <div
           className="absolute inset-0 rounded-full"

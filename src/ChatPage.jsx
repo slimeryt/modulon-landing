@@ -732,7 +732,11 @@ export default function ChatPage() {
       <div className="fixed inset-0 pointer-events-none opacity-20 dark:opacity-[0.35] bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(120,119,198,0.2),transparent)]" />
 
       <div
-        className="fixed top-4 right-4 z-40 flex items-center gap-0.5 rounded-full border border-zinc-200/90 bg-white/90 py-1 pl-1 pr-1 shadow-sm backdrop-blur-md dark:border-white/[0.1] dark:bg-[#0c0c0e]/90 dark:shadow-[0_8px_30px_-8px_rgba(0,0,0,0.65)]"
+        className="fixed z-40 flex items-center gap-0.5 rounded-full border border-zinc-200/90 bg-white/90 py-1 pl-1 pr-1 shadow-sm backdrop-blur-md dark:border-white/[0.1] dark:bg-[#0c0c0e]/90 dark:shadow-[0_8px_30px_-8px_rgba(0,0,0,0.65)] max-md:backdrop-blur-xl"
+        style={{
+          top: 'max(0.75rem, env(safe-area-inset-top, 0px))',
+          right: 'max(0.75rem, env(safe-area-inset-right, 0px))',
+        }}
         role="toolbar"
         aria-label="Chat toolbar"
       >
@@ -775,13 +779,18 @@ export default function ChatPage() {
 
       {/* Sidebar column: md+ narrows width when closed; same full height as open. Mobile still slides off. */}
       <div
-        className={`fixed z-30 left-4 top-4 bottom-4 flex flex-col overflow-hidden transition-[width,transform] duration-200 ease-out ${
+        className={`fixed z-30 flex flex-col overflow-hidden transition-[width,transform] duration-200 ease-out ${
           sidebarOpen ? 'gap-2' : 'gap-2 md:gap-1.5'
         } ${
           sidebarOpen
-            ? 'w-[min(18rem,calc(100vw-2rem))] translate-x-0'
-            : 'w-[min(18rem,calc(100vw-2rem))] -translate-x-[calc(100%+1.5rem)] md:w-14 md:translate-x-0'
+            ? 'w-[min(18rem,calc(100vw-2rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)))] translate-x-0'
+            : 'w-[min(18rem,calc(100vw-2rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)))] -translate-x-[calc(100%+1.5rem)] md:w-14 md:translate-x-0'
         }`}
+        style={{
+          left: 'max(1rem, env(safe-area-inset-left, 0px))',
+          top: 'max(1rem, env(safe-area-inset-top, 0px))',
+          bottom: 'max(1rem, env(safe-area-inset-bottom, 0px))',
+        }}
       >
         <aside
           className={`flex min-h-0 flex-1 flex-col overflow-hidden border border-zinc-200/90 bg-white/95 text-zinc-900 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:border-white/[0.1] dark:bg-[#0c0c0e]/95 dark:text-white dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.85)] ${
@@ -946,9 +955,9 @@ export default function ChatPage() {
       ) : null}
 
       <main
-        className={`relative z-10 w-full px-4 sm:px-6 py-6 h-screen min-h-0 overflow-hidden transition-[margin] duration-200 ${
+        className={`relative z-10 h-screen min-h-0 w-full overflow-hidden px-4 transition-[margin] duration-200 sm:px-6 md:py-6 ${
           sidebarOpen ? 'md:ml-[calc(18rem+2.5rem)]' : 'md:ml-[calc(3.5rem+2.5rem)]'
-        }`}
+        } max-md:pb-[max(1rem,env(safe-area-inset-bottom,0px))] max-md:pt-[max(1rem,calc(env(safe-area-inset-top,0px)+3.75rem))]`}
       >
         <div className="max-w-2xl mx-auto flex flex-col h-full">
         {loadingMessages && conversationId ? (
@@ -1004,7 +1013,7 @@ export default function ChatPage() {
         ) : null}
 
         <form
-          className="pt-2 border-t border-zinc-200/80 dark:border-white/[0.06]"
+          className="border-t border-zinc-200/80 pt-2 dark:border-white/[0.06] max-md:pb-[max(0.25rem,env(safe-area-inset-bottom,0px))]"
           onSubmit={(e) => {
             e.preventDefault();
             send();
@@ -1101,19 +1110,19 @@ export default function ChatPage() {
 
       {settingsOpen ? (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6"
+          className="fixed inset-0 z-[100] flex items-stretch justify-center p-0 sm:items-center sm:p-6"
           role="dialog"
           aria-modal="true"
           aria-labelledby="chat-settings-title"
         >
           <button
             type="button"
-            className="absolute inset-0 bg-black/50 backdrop-blur-sm dark:bg-black/70"
+            className="absolute inset-0 bg-black/40 backdrop-blur-[2px] dark:bg-black/60 sm:bg-black/50 sm:backdrop-blur-sm dark:sm:bg-black/70"
             aria-label="Close settings"
             onClick={() => setSettingsOpen(false)}
           />
-          <div className="relative z-10 flex h-[min(84vh,640px)] min-h-[min(380px,68vh)] w-full max-w-[min(92vw,56rem)] flex-col overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-[0_24px_80px_rgba(0,0,0,0.12)] dark:border-white/[0.12] dark:bg-[#0e0e10] dark:shadow-[0_24px_80px_rgba(0,0,0,0.9)]">
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-200/80 px-4 py-3.5 dark:border-white/[0.08] sm:px-5 sm:py-4">
+          <div className="relative z-10 flex h-[100dvh] w-full max-w-none flex-col overflow-hidden border-0 bg-white shadow-none dark:bg-[#0e0e10] sm:h-[min(84vh,640px)] sm:min-h-[min(380px,68vh)] sm:max-w-[min(92vw,56rem)] sm:rounded-2xl sm:border sm:border-zinc-200/90 sm:shadow-[0_24px_80px_rgba(0,0,0,0.12)] dark:sm:border-white/[0.12] dark:sm:shadow-[0_24px_80px_rgba(0,0,0,0.9)]">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-200/80 px-4 py-3.5 dark:border-white/[0.08] max-sm:pt-[max(0.875rem,env(safe-area-inset-top,0px))] sm:px-5 sm:py-4">
               <h2 id="chat-settings-title" className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-white sm:text-xl">
                 Settings
               </h2>
@@ -1127,9 +1136,9 @@ export default function ChatPage() {
               </button>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+            <div className="flex min-h-0 flex-1 flex-col bg-white dark:bg-[#0e0e10] sm:flex-row">
               <nav
-                className="flex shrink-0 flex-row gap-1 overflow-x-auto border-b border-zinc-200/80 p-2 no-scrollbar dark:border-white/[0.08] sm:w-52 sm:flex-col sm:overflow-y-auto sm:border-b-0 sm:border-r sm:p-3"
+                className="flex shrink-0 flex-row gap-1 overflow-x-auto border-b border-zinc-200/25 bg-transparent p-2 no-scrollbar dark:border-white/[0.06] sm:w-52 sm:flex-col sm:overflow-y-auto sm:border-b-0 sm:border-r sm:border-zinc-200/20 sm:bg-transparent dark:sm:border-white/[0.05]"
                 aria-label="Settings sections"
               >
                 {[
@@ -1160,7 +1169,7 @@ export default function ChatPage() {
                 ))}
               </nav>
 
-              <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 no-scrollbar">
+              <div className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-transparent p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] no-scrollbar sm:p-6 sm:pb-6">
                 {settingsNotice ? (
                   <p
                     className={`mb-5 text-xs font-mono rounded-lg px-3 py-2.5 border ${

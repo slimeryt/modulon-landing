@@ -1,26 +1,24 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Cpu, Eye, EyeOff, ArrowRight } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, Home } from 'lucide-react';
 import { useAuth, mapAuthError } from './AuthContext';
 import { useTheme } from './ThemeContext';
+import modulonIcon from './assets/icons/Modulon_Icon.png';
 
-// ─── Brand diagonal-l glyph (Anthropic-i style) ──────────────────────────────
-function BrandL({ style = {} }) {
+function BrandMark({ className = 'h-5 w-5' }) {
   return (
-    <svg
-      aria-hidden="true"
-      style={{ display: 'inline-block', width: '0.48em', height: '1em', verticalAlign: '-0.08em', ...style }}
-      viewBox="0 0 48 100"
-      fill="currentColor"
-    >
-      <line x1="13" y1="2" x2="38" y2="97" stroke="currentColor" strokeWidth="8" strokeLinecap="round" fill="none" />
-    </svg>
+    <img
+      src={modulonIcon}
+      alt=""
+      decoding="async"
+      className={`object-contain shrink-0 ${className}`}
+    />
   );
 }
 
-// ─── Globe (same as landing page) ────────────────────────────────────────────
-const GLOBE_PX = 580;
-const GLOBE_R  = 268;
+// ─── Globe (same as landing page, slightly larger for login hero) ────────────
+const GLOBE_PX = 680;
+const GLOBE_R  = 314;
 const MASK_W   = 720;
 const MASK_H   = 360;
 const TILT     = (20 * Math.PI) / 180;
@@ -277,15 +275,20 @@ export default function LoginPage() {
         backgroundSize: '72px 72px',
       }}
     >
+      <Link
+        to="/"
+        aria-label="Home"
+        className="fixed left-5 top-5 z-[60] flex h-11 w-11 items-center justify-center rounded-full border border-zinc-200/50 bg-white/90 text-zinc-700 shadow-sm backdrop-blur-md transition-all hover:border-zinc-300/55 hover:bg-white hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40 dark:border-white/10 dark:bg-[#0c0c0e]/90 dark:text-white/80 dark:shadow-[0_4px_24px_-8px_rgba(0,0,0,0.5)] dark:hover:border-white/18 dark:hover:bg-white/[0.1] dark:hover:text-white dark:focus-visible:ring-white/25"
+      >
+        <Home className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+      </Link>
       {/* ── Left — form panel ── */}
-      <div className="relative z-10 flex flex-col justify-center w-full max-w-md px-8 py-16 min-h-screen">
+      <div className="relative z-10 flex min-h-screen w-full max-w-md flex-col justify-center px-8 py-16 max-sm:pl-[4.75rem]">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-2 mb-14 group w-fit">
-          <Cpu className="w-5 h-5 text-zinc-600 dark:text-white/70 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors" strokeWidth={1.5} />
-          <span className="text-zinc-600 dark:text-white/70 group-hover:text-zinc-900 dark:group-hover:text-white font-semibold tracking-tight transition-colors">
-            Modulon
-          </span>
-          <span className="text-zinc-600 dark:text-white/25 text-xs font-mono">v0.1.0</span>
+        <Link to="/" className="mb-14 flex w-fit items-center gap-2 rounded-lg py-1 pl-1 pr-2 transition-opacity hover:opacity-90">
+          <BrandMark className="h-5 w-5 opacity-90 dark:opacity-95" />
+          <span className="font-semibold tracking-tight text-zinc-900 dark:text-white">Modulon</span>
+          <span className="font-mono text-xs text-zinc-500 dark:text-white/30">v0.1.0</span>
         </Link>
 
         {/* Heading */}
@@ -299,7 +302,7 @@ export default function LoginPage() {
         </div>
 
         {!firebaseConfigured ? (
-          <p className="mb-4 text-xs text-amber-900 dark:text-amber-200/90 font-mono leading-relaxed border border-amber-500/30 dark:border-amber-500/25 rounded-lg px-3 py-2 bg-amber-500/15 dark:bg-amber-500/10">
+          <p className="mb-4 rounded-2xl border border-amber-500/22 bg-amber-500/15 px-4 py-3 text-xs font-mono leading-relaxed text-amber-900 dark:border-amber-500/18 dark:bg-amber-500/10 dark:text-amber-200/90">
             Firebase env vars are missing. Copy <span className="text-amber-950 dark:text-white/90">.env.example</span> →{' '}
             <span className="text-amber-950 dark:text-white/90">.env</span>, add your Web App config from the Firebase console,
             then restart <span className="text-amber-950 dark:text-white/90">npm run dev</span>.
@@ -310,7 +313,7 @@ export default function LoginPage() {
         <form onSubmit={showForgot ? handlePasswordReset : handleSubmit} className="flex flex-col gap-4">
           {/* Email */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-zinc-600 dark:text-white/50 font-medium uppercase tracking-widest">
+            <label className="text-xs text-zinc-600 dark:text-white/50 font-medium uppercase tracking-widest pl-1">
               Email
             </label>
             <input
@@ -319,13 +322,13 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
               autoComplete="email"
-              className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-300/80 transition-all duration-200 dark:bg-white/[0.04] dark:border-white/10 dark:text-white dark:placeholder:text-white/20 dark:focus:border-white/30 dark:focus:ring-white/20"
+              className="w-full rounded-full border border-zinc-200/50 bg-white px-5 py-3.5 text-sm text-zinc-900 placeholder:text-zinc-400 shadow-sm focus:border-zinc-400/70 focus:outline-none focus:ring-2 focus:ring-zinc-300/25 transition-all duration-200 dark:bg-white/[0.05] dark:border-white/10 dark:text-white dark:placeholder:text-white/25 dark:focus:border-white/28 dark:focus:ring-white/15"
             />
           </div>
 
           {/* Password */}
           <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2 pl-1">
               <label className="text-xs text-zinc-600 dark:text-white/50 font-medium uppercase tracking-widest">
                 Password
               </label>
@@ -336,7 +339,7 @@ export default function LoginPage() {
                   setResetSent(false);
                   setError('');
                 }}
-                className="text-xs text-zinc-500 dark:text-white/30 hover:text-zinc-800 dark:hover:text-white/60 transition-colors cursor-pointer"
+                className="shrink-0 rounded-full border border-transparent px-3 py-1 text-xs text-zinc-600 transition-all hover:border-zinc-200/45 hover:bg-zinc-100/80 hover:text-zinc-900 dark:text-white/40 dark:hover:border-white/08 dark:hover:bg-white/[0.06] dark:hover:text-white/75 cursor-pointer"
               >
                 {showForgot ? 'Back to sign in' : 'Forgot password?'}
               </button>
@@ -349,12 +352,12 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   autoComplete="current-password"
-                  className="w-full rounded-lg border border-zinc-200 bg-white px-4 py-3 pr-11 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-300/80 transition-all duration-200 dark:bg-white/[0.04] dark:border-white/10 dark:text-white dark:placeholder:text-white/20 dark:focus:border-white/30 dark:focus:ring-white/20"
+                  className="w-full rounded-full border border-zinc-200/50 bg-white px-5 py-3.5 pr-12 text-sm text-zinc-900 placeholder:text-zinc-400 shadow-sm focus:border-zinc-400/70 focus:outline-none focus:ring-2 focus:ring-zinc-300/25 transition-all duration-200 dark:bg-white/[0.05] dark:border-white/10 dark:text-white dark:placeholder:text-white/25 dark:focus:border-white/28 dark:focus:ring-white/15"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPw((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 dark:text-white/30 hover:text-zinc-800 dark:hover:text-white/60 transition-colors cursor-pointer"
+                  className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-white/35 dark:hover:bg-white/[0.08] dark:hover:text-white/80 cursor-pointer"
                   aria-label={showPw ? 'Hide password' : 'Show password'}
                 >
                   {showPw
@@ -363,7 +366,7 @@ export default function LoginPage() {
                 </button>
               </div>
             ) : (
-              <p className="text-xs text-zinc-600 dark:text-white/35 leading-relaxed">
+              <p className="rounded-full border border-zinc-200/40 bg-white/60 px-5 py-3 text-xs leading-relaxed text-zinc-600 dark:border-white/08 dark:bg-white/[0.04] dark:text-white/40">
                 We’ll email you a reset link for the address above.
               </p>
             )}
@@ -371,10 +374,10 @@ export default function LoginPage() {
 
           {/* Error */}
           {error && (
-            <p className="text-xs text-red-400/90 font-mono">{error}</p>
+            <p className="rounded-full border border-red-500/22 bg-red-500/10 px-4 py-2 text-center text-xs text-red-600 dark:text-red-300/90">{error}</p>
           )}
           {resetSent ? (
-            <p className="text-xs text-emerald-300/90 font-mono">
+            <p className="rounded-full border border-emerald-500/22 bg-emerald-500/10 px-4 py-2 text-center text-xs text-emerald-700 dark:text-emerald-300/90">
               Check your inbox for a password reset link.
             </p>
           ) : null}
@@ -383,37 +386,37 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="mt-2 bg-white text-black font-semibold text-sm px-6 py-3 rounded-lg hover:bg-white/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer flex items-center justify-center gap-2"
+            className="mt-2 flex w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-zinc-200/45 bg-white px-8 py-3.5 text-sm font-semibold text-black shadow-sm transition-all duration-200 hover:border-zinc-300/50 hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white dark:text-black dark:hover:border-white/15 dark:hover:bg-white/90"
           >
             {loading ? (
               <span className="inline-flex gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-black/50 animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-1.5 h-1.5 rounded-full bg-black/50 animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-1.5 h-1.5 rounded-full bg-black/50 animate-bounce" style={{ animationDelay: '300ms' }} />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current opacity-60" style={{ animationDelay: '0ms' }} />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current opacity-60" style={{ animationDelay: '150ms' }} />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current opacity-60" style={{ animationDelay: '300ms' }} />
               </span>
             ) : showForgot ? (
               'Send reset link'
             ) : (
               <>
                 Sign in
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="h-4 w-4 shrink-0" />
               </>
             )}
           </button>
         </form>
 
         {/* Divider */}
-        <div className="flex items-center gap-3 my-6">
-          <div className="flex-1 h-px bg-zinc-200 dark:bg-white/8" />
-          <span className="text-xs text-zinc-600 dark:text-white/25 font-mono">or</span>
-          <div className="flex-1 h-px bg-zinc-200 dark:bg-white/8" />
+        <div className="my-6 flex items-center gap-3">
+          <div className="h-px flex-1 bg-zinc-200/45 dark:bg-white/6" />
+          <span className="font-mono text-xs text-zinc-600 dark:text-white/25">or</span>
+          <div className="h-px flex-1 bg-zinc-200/45 dark:bg-white/6" />
         </div>
 
         <button
           type="button"
           onClick={handleGoogle}
           disabled={loading || !firebaseConfigured}
-          className="w-full rounded-lg border border-zinc-300 text-zinc-800 text-sm font-medium px-6 py-3 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/15 dark:text-white/85 dark:hover:bg-white/[0.06] transition-colors"
+          className="w-full cursor-pointer rounded-full border border-zinc-200/50 bg-white px-8 py-3.5 text-sm font-medium text-zinc-800 shadow-sm transition-all duration-200 hover:border-zinc-300/55 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/90 dark:hover:border-white/18 dark:hover:bg-white/[0.08]"
         >
           Continue with Google
         </button>
