@@ -265,6 +265,7 @@ if (SERVE_SPA) {
     if (req.path.startsWith('/api')) return next();
     if (req.method !== 'GET') return next();
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.send(SPA_INDEX_HTML);
   });
 }

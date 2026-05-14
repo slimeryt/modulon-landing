@@ -330,29 +330,26 @@ function Navbar() {
     'flex min-w-10 items-center justify-center py-2 text-zinc-700 transition-colors duration-200 hover:bg-zinc-200/90 hover:text-zinc-900 focus:outline-none focus-visible:relative focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-zinc-400/40 focus-visible:ring-offset-0 dark:text-white/85 dark:hover:bg-white/[0.1] dark:hover:text-white dark:focus-visible:ring-white/25';
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 60);
+    const onScroll = () => setScrolled(window.scrollY > 4);
+    onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
   return (
-    <>
-      {/* Full navbar — fades out on scroll */}
-      <nav
-        className="fixed top-0 left-0 right-0 z-50 border-b border-zinc-200/90 bg-white/80 backdrop-blur-md dark:border-white/10 dark:bg-black/60"
-        style={{
-          opacity: scrolled ? 0 : 1,
-          transform: scrolled ? 'translateY(-10px)' : 'translateY(0)',
-          pointerEvents: scrolled ? 'none' : 'auto',
-          transition: 'opacity 400ms ease, transform 400ms cubic-bezier(0.16,1,0.3,1)',
-        }}
-      >
+    <nav
+      className={`fixed top-0 left-0 right-0 z-50 border-b backdrop-blur-xl transition-[background-color,box-shadow,border-color] duration-300 ${
+        scrolled
+          ? 'border-zinc-200/90 bg-white/92 shadow-[0_1px_0_rgba(0,0,0,0.04),0_12px_40px_-16px_rgba(0,0,0,0.12)] dark:border-white/[0.08] dark:bg-[#0a0a0a]/92 dark:shadow-[0_1px_0_rgba(255,255,255,0.04),0_20px_50px_-24px_rgba(0,0,0,0.75)]'
+          : 'border-zinc-200/80 bg-white/85 dark:border-white/[0.06] dark:bg-[#0a0a0a]/80'
+      }`}
+    >
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <Link to="/" className="flex items-center gap-2 rounded-lg -ml-1 pl-1 pr-2 py-1 hover:opacity-90 transition-opacity">
             <BrandMark className="h-5 w-5 opacity-90 dark:opacity-95" />
             <span className="text-zinc-900 dark:text-white font-semibold tracking-tight text-lg">Modulon</span>
             <span className="text-zinc-600 dark:text-white/30 text-xs font-mono ml-1">v0.1.0</span>
-          </div>
+          </Link>
           <div className="hidden md:flex items-center gap-8">
             {['About', 'Docs'].map((l) => (
               <a key={l} href={`#${l.toLowerCase()}`} className="text-zinc-600 dark:text-white/50 text-sm hover:text-zinc-900 dark:hover:text-white transition-colors duration-200 cursor-pointer">{l}</a>
@@ -422,25 +419,7 @@ function Navbar() {
             </div>
           </div>
         </div>
-      </nav>
-
-      {/* Collapsed logo — appears in top-left on scroll */}
-      <Link
-        to="/"
-        className="fixed top-4 left-5 z-50 flex items-center gap-1.5 group"
-        style={{
-          opacity: scrolled ? 1 : 0,
-          transform: scrolled ? 'translateY(0)' : 'translateY(-10px)',
-          pointerEvents: scrolled ? 'auto' : 'none',
-          transition: 'opacity 400ms ease, transform 400ms cubic-bezier(0.16,1,0.3,1)',
-        }}
-      >
-        <BrandMark className="h-4 w-4 opacity-70 group-hover:opacity-100 transition-opacity" />
-        <span className="text-zinc-600 dark:text-white/60 group-hover:text-zinc-900 dark:group-hover:text-white text-sm font-semibold tracking-tight transition-colors">
-          Modulon
-        </span>
-      </Link>
-    </>
+    </nav>
   );
 }
 
