@@ -10,9 +10,9 @@ npm run dev:all
 ```
 
 - Site: [http://localhost:5181](http://localhost:5181)  
-- API: port **5182** (Vite proxies `/api` in dev)
+- API: default port **4310** (Vite proxies `/api` to it in dev; override with `API_PORT` in `.env`)
 
-Copy `.env.example` to `.env` if you use `ADMIN_TRAIN_SECRET` / `VITE_ADMIN_TRAIN_SECRET` for `/api/chat`.
+Copy `.env.example` to `.env` for local API port, Firebase, etc.
 
 ## Train the model
 
@@ -36,13 +36,20 @@ Helpers from repo root: `npm run train:loop` (back‑to‑back runs, Ctrl+C to s
 
 ## Deploy on Railway (GitHub)
 
-1. **New Project** → **Deploy from GitHub** → pick the repo.
-2. Railway runs **`npm install`**, **`npm run build`**, **`npm start`**. The app serves the SPA from `dist/` and **`/api`** on the same host.
-3. **Variables** (optional): `ADMIN_TRAIN_SECRET` and matching `VITE_ADMIN_TRAIN_SECRET` for chat; redeploy after changing `VITE_*`.
-4. **SQLite**: default on Railway is `/app/data/chat.sqlite` when `RAILWAY_ENVIRONMENT` is set; mount a volume at `/app/data` for persistence.
+The repo includes a **`Dockerfile`** that:
+
+1. Installs **Python 3** + **`requirements-api.txt`** (torch + transformers for inference).
+2. Runs **`npm run build`** (Vite → `dist/`) then **`npm prune --omit=dev`**.
+3. Starts **`node server/chat-api.mjs`**, which serves **`/api/*`** and the **React SPA** from **`dist/`** on the same **`PORT`**.
+
+**Railway:** New Project → Deploy from GitHub → ensure the **Dockerfile** builder is used. Set **`VITE_*`** Firebase (and any `VITE_` API URLs) in the service **Variables** so they exist at **build** time.
+
+- **`API_HOST=0.0.0.0`** is set in the image; **`PORT`** comes from Railway.
+- **Python**: locally on Linux use `python3` or **`PYTHON`**. In the image, **`PYTHON=python3`** is set.
+- **SQLite**: set **`CHAT_DB_PATH`** (e.g. `/app/data/chat.sqlite`) and mount a volume on **`/app/data`** for persistence.
 
 ## Repo layout
 
 - `src/` — React app (`/`, `/chat`)
-- `server/` — Express API (`train-api.mjs`, `chat-db.mjs`)
+- `server/` — Express chat API (`chat-api.mjs`, `chat-db.mjs`)
 - `chatbot-ai/` — Python seq2seq (train in terminal; large artifacts gitignored)

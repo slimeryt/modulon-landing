@@ -1,0 +1,14 @@
+node_modules
+dist
+.git
+.env
+.env.*
+!.env.example
+chatbot-ai/.venv
+chatbot-ai/venv
+chatbot-ai/chat.db
+chatbot-ai/chat.db-shm
+chatbot-ai/chat.db-wal
+**/__pycache__
+*.pyc
+.DS_Store

@@ -9,13 +9,17 @@
  *   DEL  /api/chat/conversations/:id
  *   POST /api/chat   { message, conversationId? }
  *
- * Run:  node server/train-api.mjs
+ * Run:  node server/chat-api.mjs
  *       npm run dev:all   (Vite + API together)
+ *
+ * Production: if ../dist/index.html exists (after `npm run build`), the same server
+ * serves the React SPA and `/api/*` (Railway / Docker single process).
  */
 
 import express   from 'express';
 import Database  from 'better-sqlite3';
 import { spawn } from 'child_process';
+import fs        from 'fs';
 import path      from 'path';
 import { fileURLToPath } from 'url';
 import dotenv    from 'dotenv';
@@ -26,18 +30,33 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT      = path.join(__dirname, '..');
 /** Default avoids Windows Hyper-V excluded ranges that often block low ports (e.g. 3001). Override with API_PORT in `.env`. */
 const DEFAULT_PORT = 4310;
-const PORT      = Number(process.env.API_PORT || DEFAULT_PORT);
-/** Bind address. Default 127.0.0.1 avoids Windows EACCES on 0.0.0.0 for some reserved port ranges. Use 0.0.0.0 in production if needed. */
+/** Railway / Render set `PORT`; local dev often uses `API_PORT`. */
+const PORT      = Number(process.env.PORT || process.env.API_PORT || DEFAULT_PORT);
+/**
+ * Bind address. Default 127.0.0.1 for local Windows safety.
+ * Docker / Railway: set API_HOST=0.0.0.0 (see repo Dockerfile).
+ */
 const HOST      = process.env.API_HOST || '127.0.0.1';
+
+/** Python executable for the inference subprocess (Linux images usually have `python3` only). */
+function pythonExecutable() {
+  if (process.env.PYTHON) return process.env.PYTHON;
+  if (process.env.PYTHON_BIN) return process.env.PYTHON_BIN;
+  return process.platform === 'win32' ? 'python' : 'python3';
+}
 const DB_PATH   = process.env.CHAT_DB_PATH
   || path.join(ROOT, 'chatbot-ai', 'chat.db');
+
+const DIST_DIR   = path.join(ROOT, 'dist');
+const INDEX_HTML = path.join(DIST_DIR, 'index.html');
+const SERVE_SPA  = fs.existsSync(INDEX_HTML);
 
 // ── Express ───────────────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json());
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
   res.header('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
@@ -85,9 +104,17 @@ let pythonReady  = false;
 function startPython() {
   const script = path.join(ROOT, 'chatbot-ai', 'gpt2', 'api_server.py');
   const cwd    = path.join(ROOT, 'chatbot-ai');
+  const py     = pythonExecutable();
 
-  console.log('[python] Starting inference server…');
-  pythonProc = spawn('python', [script], { cwd, stdio: ['pipe','pipe','pipe'] });
+  console.log(`[python] Starting inference server (${py})…`);
+  pythonProc = spawn(py, [script], { cwd, stdio: ['pipe', 'pipe', 'pipe'] });
+
+  pythonProc.on('error', (err) => {
+    console.error('[python] Failed to spawn:', err.message);
+    console.error(`[python] Fix: install Python 3, or set PYTHON to the interpreter path (e.g. PYTHON=python3).`);
+    pythonReady = false;
+    pythonProc = null;
+  });
 
   pythonProc.stdout.on('data', (chunk) => {
     stdoutBuf += chunk.toString();
@@ -123,7 +150,7 @@ function startPython() {
 function askPython(message) {
   return new Promise((resolve, reject) => {
     if (!pythonProc || !pythonReady) {
-      return reject(new Error('Model not ready — train first or wait for it to load.'));
+      return reject(new Error('Model not ready — wait for inference to start or check server logs.'));
     }
     const timer = setTimeout(() => {
       pendingQueue = pendingQueue.filter((p) => p.resolve !== resolve);
@@ -189,6 +216,29 @@ app.post('/api/chat', async (req, res) => {
   res.json({ conversationId: convId, response: reply });
 });
 
+// ── Static SPA (production: `dist/` next to this file’s project root) ─────────
+if (SERVE_SPA) {
+  app.use(
+    express.static(DIST_DIR, {
+      index: false,
+      maxAge: process.env.NODE_ENV === 'production' ? '1h' : 0,
+    }),
+  );
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    if (req.method !== 'GET') return next();
+    res.sendFile(INDEX_HTML, (err) => {
+      if (err) next(err);
+    });
+  });
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 startPython();
-app.listen(PORT, HOST, () => console.log(`\nModulon API → http://${HOST}:${PORT}\n`));
+app.listen(PORT, HOST, () => {
+  const base = `http://${HOST}:${PORT}`;
+  console.log(`\nModulon API → ${base}/api/health`);
+  if (SERVE_SPA) console.log(`Modulon app  → ${base}/`);
+  else console.log('(No dist/index.html — run `npm run build` to serve the SPA from this process.)');
+  console.log('');
+});

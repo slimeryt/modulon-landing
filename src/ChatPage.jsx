@@ -279,15 +279,8 @@ function accountInitials(user) {
   return n.slice(0, 2).toUpperCase();
 }
 
-function authHeaders(extra = {}) {
-  const h = { ...extra };
-  const secret = import.meta.env.VITE_ADMIN_TRAIN_SECRET;
-  if (secret) h.Authorization = `Bearer ${secret}`;
-  return h;
-}
-
 async function apiJson(path, opts = {}) {
-  const headers = authHeaders(opts.headers);
+  const headers = { ...(opts.headers || {}) };
   if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
     opts = { ...opts, body: JSON.stringify(opts.body) };
@@ -390,7 +383,7 @@ export default function ChatPage() {
     let c = false;
     (async () => {
       try {
-        const r = await fetch(`${API}/health`, { headers: authHeaders() });
+        const r = await fetch(`${API}/health`);
         if (!c) setApiOk(r.ok);
       } catch {
         if (!c) setApiOk(false);

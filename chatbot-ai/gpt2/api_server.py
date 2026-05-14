@@ -5,7 +5,7 @@ Reads  JSON lines from stdin : {"message": "..."}
 Writes JSON lines to stdout  : {"response": "..."}
 
 Stays alive — model is loaded once, then handles requests in a loop.
-Started automatically by server/train-api.mjs.
+Started automatically by server/chat-api.mjs.
 """
 
 import json

@@ -1,0 +1,4 @@
+# Minimal deps for gpt2/api_server.py (inference only). Full training stack: requirements.txt
+torch>=2.0.0,<3
+transformers>=4.40.0
+numpy>=1.23.0
