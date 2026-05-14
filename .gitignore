@@ -11,6 +11,9 @@ dist/
 data/*.sqlite
 data/*.sqlite-shm
 data/*.sqlite-wal
+chatbot-ai/chat.db
+chatbot-ai/chat.db-shm
+chatbot-ai/chat.db-wal
 
 # Logs & OS
 *.log
@@ -29,7 +32,6 @@ chatbot-ai/venv/
 
 # Large / generated ML artifacts (keep repo small)
 chatbot-ai/models/*.pth
-chatbot-ai/models/train_config.json
 chatbot-ai/data/processed/
 chatbot-ai/data/raw/
 

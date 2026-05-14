@@ -1,6 +1,27 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      (function () {
+        try {
+          var k = 'modulon-theme';
+          var raw = localStorage.getItem(k);
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var dark = true;
+          if (raw === 'light') dark = false;
+          else if (raw === 'dark') dark = true;
+          else if (raw === 'system') dark = prefersDark;
+          var t = dark ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-theme', t);
+          document.documentElement.classList.toggle('dark', dark);
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+          if (document.body) {
+            document.body.setAttribute('data-theme', t);
+            document.body.classList.toggle('dark', dark);
+          }
+        } catch (e) {}
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Modulon — AI Chatbot</title>

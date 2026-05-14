@@ -6,6 +6,8 @@ Examples:
   python scripts/overnight_train.py --at 23:45
   python scripts/overnight_train.py --delay-minutes 10 --log logs/overnight.log
   python scripts/overnight_train.py --at 02:00 --repeat-daily --log logs/nightly.log
+  python scripts/overnight_train.py --loop
+  python scripts/overnight_train.py --loop --log logs/loop.log
 
 Requires the machine to stay awake (disable sleep) if you want GPU training overnight.
 """
@@ -82,11 +84,19 @@ def main() -> None:
         action="store_true",
         help="After each run, wait until the next --at and run again (requires --at).",
     )
+    p.add_argument(
+        "--loop",
+        action="store_true",
+        help="After each train.py run exits, start again after a short pause (Ctrl+C to stop).",
+    )
     args = p.parse_args()
 
     if not TRAIN_SCRIPT.is_file():
         print(f"Missing {TRAIN_SCRIPT}", file=sys.stderr)
         sys.exit(2)
+
+    if args.loop and (args.at or args.repeat_daily or args.delay_minutes):
+        p.error("--loop runs back-to-back only; omit --at, --repeat-daily, and --delay-minutes")
 
     if args.repeat_daily and not args.at:
         p.error("--repeat-daily requires --at HH:MM")
@@ -107,7 +117,7 @@ def main() -> None:
             time.sleep(sec)
             args.delay_minutes = 0
 
-        if at_h is not None and at_m is not None:
+        if not args.loop and at_h is not None and at_m is not None:
             sec = seconds_until(at_h, at_m)
             print(
                 f"[overnight_train] next start at {at_h:02d}:{at_m:02d} local "
@@ -118,6 +128,11 @@ def main() -> None:
 
         rc = run_train(ROOT, log_path)
         print(f"[overnight_train] train.py finished with exit {rc}", flush=True)
+
+        if args.loop:
+            print("[overnight_train] --loop: restarting in 3s (Ctrl+C to stop)...", flush=True)
+            time.sleep(3)
+            continue
 
         if not args.repeat_daily:
             sys.exit(rc)

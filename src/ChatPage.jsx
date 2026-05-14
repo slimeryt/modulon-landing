@@ -1,15 +1,283 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft,
+  BarChart3,
+  ClipboardCopy,
+  Copy,
+  File,
+  Home,
+  Image,
+  Info,
+  LogOut,
   MessageCircle,
+  Monitor,
+  Moon,
   PanelLeft,
+  Palette,
   Plus,
   Send,
+  Settings,
+  Shield,
+  Sun,
   Trash2,
+  User,
+  X,
 } from 'lucide-react';
+import { useAuth, mapAuthError } from './AuthContext';
+import { useTheme } from './ThemeContext';
 
 const API = '/api';
+
+const DAILY_USAGE_KEY = 'modulon-daily-usage';
+const WEEKLY_USAGE_KEY = 'modulon-weekly-usage';
+const EXTRA_USAGE_KEY = 'modulon-extra-usage';
+const EXTRA_USAGE_CREDITS_KEY = 'modulon-extra-usage-credits';
+
+/** Soft caps for progress UI (local counts; not enforced by the server). */
+const DAILY_MESSAGE_CAP = 120;
+const DAILY_MESSAGE_CAP_EXTRA = 200;
+const WEEKLY_MESSAGE_CAP = DAILY_MESSAGE_CAP * 7;
+const WEEKLY_MESSAGE_CAP_EXTRA = DAILY_MESSAGE_CAP_EXTRA * 7;
+
+/** ISO 3166 region → ISO 4217 currency for display (best-effort from browser locale). */
+const REGION_TO_CURRENCY = {
+  US: 'USD',
+  CA: 'CAD',
+  MX: 'MXN',
+  BR: 'BRL',
+  GB: 'GBP',
+  CH: 'CHF',
+  NO: 'NOK',
+  SE: 'SEK',
+  DK: 'DKK',
+  IS: 'ISK',
+  AU: 'AUD',
+  NZ: 'NZD',
+  JP: 'JPY',
+  KR: 'KRW',
+  CN: 'CNY',
+  TW: 'TWD',
+  HK: 'HKD',
+  SG: 'SGD',
+  IN: 'INR',
+  RU: 'RUB',
+  TR: 'TRY',
+  ZA: 'ZAR',
+  IL: 'ILS',
+  AE: 'AED',
+  SA: 'SAR',
+  TH: 'THB',
+  MY: 'MYR',
+  ID: 'IDR',
+  PH: 'PHP',
+  VN: 'VND',
+  DE: 'EUR',
+  FR: 'EUR',
+  IT: 'EUR',
+  ES: 'EUR',
+  NL: 'EUR',
+  BE: 'EUR',
+  AT: 'EUR',
+  IE: 'EUR',
+  PT: 'EUR',
+  FI: 'EUR',
+  GR: 'EUR',
+  LU: 'EUR',
+  MT: 'EUR',
+  CY: 'EUR',
+  SI: 'EUR',
+  SK: 'EUR',
+  EE: 'EUR',
+  LV: 'EUR',
+  LT: 'EUR',
+  HR: 'EUR',
+  PL: 'PLN',
+  RO: 'RON',
+  CZ: 'CZK',
+  HU: 'HUF',
+  BG: 'BGN',
+};
+
+function getLocaleCurrency() {
+  const language =
+    typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'en-US';
+  try {
+    const region = new Intl.Locale(language).maximize().region;
+    const currency = (region && REGION_TO_CURRENCY[region]) || 'USD';
+    return { locale: language, currency };
+  } catch {
+    return { locale: 'en-US', currency: 'USD' };
+  }
+}
+
+function formatCreditsMoney(amount) {
+  const { locale, currency } = getLocaleCurrency();
+  try {
+    return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(amount);
+  } catch {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  }
+}
+
+function todayLocalISO() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** Monday of the current week (local calendar), as YYYY-MM-DD. */
+function mondayLocalISO() {
+  const d = new Date();
+  const dow = d.getDay();
+  const offset = dow === 0 ? -6 : 1 - dow;
+  const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() + offset);
+  const y = mon.getFullYear();
+  const m = String(mon.getMonth() + 1).padStart(2, '0');
+  const day = String(mon.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function readDailyUsage() {
+  const day = todayLocalISO();
+  try {
+    const raw = localStorage.getItem(DAILY_USAGE_KEY);
+    if (!raw) return { day, messages: 0 };
+    const o = JSON.parse(raw);
+    if (o.day !== day) return { day, messages: 0 };
+    return { day, messages: Number(o.messages) || 0 };
+  } catch {
+    return { day, messages: 0 };
+  }
+}
+
+function writeDailyUsage(u) {
+  try {
+    localStorage.setItem(DAILY_USAGE_KEY, JSON.stringify(u));
+  } catch {
+    /* ignore */
+  }
+}
+
+function readWeeklyUsage() {
+  const weekStart = mondayLocalISO();
+  try {
+    const raw = localStorage.getItem(WEEKLY_USAGE_KEY);
+    if (!raw) return { weekStart, messages: 0 };
+    const o = JSON.parse(raw);
+    if (o.weekStart !== weekStart) return { weekStart, messages: 0 };
+    return { weekStart, messages: Number(o.messages) || 0 };
+  } catch {
+    return { weekStart, messages: 0 };
+  }
+}
+
+function writeWeeklyUsage(u) {
+  try {
+    localStorage.setItem(WEEKLY_USAGE_KEY, JSON.stringify(u));
+  } catch {
+    /* ignore */
+  }
+}
+
+function readExtraUsage() {
+  try {
+    return localStorage.getItem(EXTRA_USAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeExtraUsage(enabled) {
+  try {
+    localStorage.setItem(EXTRA_USAGE_KEY, enabled ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
+
+function readExtraUsageCredits() {
+  try {
+    const raw = localStorage.getItem(EXTRA_USAGE_CREDITS_KEY);
+    if (raw == null || raw === '') return 0;
+    const n = Number(raw);
+    return Number.isFinite(n) ? Math.max(0, n) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeExtraUsageCredits(amount) {
+  try {
+    localStorage.setItem(EXTRA_USAGE_CREDITS_KEY, String(amount));
+  } catch {
+    /* ignore */
+  }
+}
+
+const USAGE_BAR_MESSAGES =
+  'from-cyan-500 via-sky-500 to-indigo-500 shadow-[0_0_22px_-6px_rgba(56,189,248,0.55)]';
+const USAGE_BAR_OVER =
+  'from-amber-500 via-orange-500 to-rose-500 shadow-[0_0_24px_-4px_rgba(251,146,60,0.55)]';
+
+function UsageProgressBar({ label, current, cap, period, className = '' }) {
+  const ratio = cap > 0 ? current / cap : 0;
+  const over = current > cap;
+  const fillWidth = Math.min(100, ratio * 100);
+  const remaining = Math.max(0, cap - current);
+  const usedPct = Math.round(ratio * 100);
+  const remainingPct = cap > 0 && !over ? Math.round((remaining / cap) * 100) : 0;
+  const fillGradient = over ? USAGE_BAR_OVER : USAGE_BAR_MESSAGES;
+  const guideWord = period === 'weekly' ? 'weekly' : 'daily';
+
+  return (
+    <div className={`space-y-2.5 ${className}`.trim()}>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-zinc-900 dark:text-white/95">{label}</p>
+        </div>
+        <div className="shrink-0 text-right">
+          <span className="font-mono text-base font-bold tabular-nums tracking-tight text-zinc-900 dark:text-white">
+            {usedPct}%
+          </span>
+          <span className="block text-xs font-medium text-zinc-400 dark:text-white/35">of {guideWord} guide</span>
+        </div>
+      </div>
+      <div className="relative">
+        <div className="h-4 w-full overflow-hidden rounded-full bg-zinc-200/90 shadow-inner dark:bg-zinc-950/80 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+          <div
+            className={`h-full rounded-full bg-gradient-to-r transition-[width] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${fillGradient}`}
+            style={{ width: `${fillWidth}%` }}
+          />
+        </div>
+        <div
+          className="pointer-events-none absolute inset-0 rounded-full ring-1 ring-inset ring-zinc-900/[0.06] dark:ring-white/[0.08]"
+          aria-hidden
+        />
+      </div>
+      <div className="text-[10px] font-medium uppercase tracking-widest text-zinc-500 dark:text-white/35">
+        <span className={over ? 'text-amber-700 dark:text-amber-300/90' : ''}>
+          {over
+            ? `Past ${guideWord} guide (${usedPct}% used)`
+            : `${remainingPct}% of guide still available`}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function accountDisplayName(user) {
+  if (!user) return 'Guest';
+  return user.displayName?.trim() || user.email?.split('@')[0] || 'User';
+}
+
+function accountInitials(user) {
+  const n = accountDisplayName(user);
+  const parts = n.split(/[\s._-]+/).filter(Boolean);
+  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  return n.slice(0, 2).toUpperCase();
+}
 
 function authHeaders(extra = {}) {
   const h = { ...extra };
@@ -43,6 +311,9 @@ function mapRowsToMessages(rows) {
 }
 
 export default function ChatPage() {
+  const navigate = useNavigate();
+  const { firebaseConfigured, user, signOutUser, sendPasswordReset } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [conversations, setConversations] = useState([]);
   const [conversationId, setConversationId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -53,15 +324,34 @@ export default function ChatPage() {
   const [err, setErr] = useState('');
   const [apiOk, setApiOk] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState('account');
+  const [settingsNotice, setSettingsNotice] = useState('');
   const bottomRef = useRef(null);
+  const contextMenuRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const imageInputRef = useRef(null);
+  const attachPlusRef = useRef(null);
+  const attachControlsRef = useRef(null);
+  const attachMenuRef = useRef(null);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [attachMenuPos, setAttachMenuPos] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
+  const [dailyUsage, setDailyUsage] = useState(() => readDailyUsage());
+  const [weeklyUsage, setWeeklyUsage] = useState(() => readWeeklyUsage());
+  const [extraUsage, setExtraUsage] = useState(() => readExtraUsage());
+  const [extraUsageCredits, setExtraUsageCredits] = useState(() => readExtraUsageCredits());
 
   const refreshConversations = useCallback(async () => {
     setLoadingList(true);
     try {
       const d = await apiJson('/chat/conversations');
-      setConversations(d.conversations || []);
+      const list = d.conversations || [];
+      setConversations(list);
+      return list;
     } catch {
       setConversations([]);
+      return [];
     } finally {
       setLoadingList(false);
     }
@@ -84,6 +374,18 @@ export default function ChatPage() {
     }
   }, []);
 
+  const newChat = useCallback(async () => {
+    setErr('');
+    try {
+      const d = await apiJson('/chat/conversations', { method: 'POST' });
+      setConversationId(d.id);
+      await refreshConversations();
+      await loadMessages(d.id);
+    } catch (e) {
+      setErr(e.message || String(e));
+    }
+  }, [refreshConversations, loadMessages]);
+
   useEffect(() => {
     let c = false;
     (async () => {
@@ -101,8 +403,20 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (apiOk !== true) return;
-    refreshConversations();
-  }, [apiOk, refreshConversations]);
+    let cancelled = false;
+    (async () => {
+      const list = await refreshConversations();
+      if (cancelled) return;
+      if (list.length > 0) {
+        setConversationId((id) => (id == null ? list[0].id : id));
+      } else {
+        await newChat();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [apiOk, refreshConversations, newChat]);
 
   useEffect(() => {
     if (conversationId) loadMessages(conversationId);
@@ -112,24 +426,236 @@ export default function ChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, sending]);
 
-  const newChat = async () => {
-    setErr('');
-    try {
-      const d = await apiJson('/chat/conversations', { method: 'POST' });
-      setConversationId(d.id);
-      await refreshConversations();
-      await loadMessages(d.id);
-    } catch (e) {
-      setErr(e.message || String(e));
+  useEffect(() => {
+    if (!settingsOpen || user) return;
+    if (settingsSection === 'account' || settingsSection === 'security') {
+      setSettingsSection('appearance');
     }
-  };
+  }, [settingsOpen, user, settingsSection]);
+
+  // Lock page scroll: only the message list should scroll.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
 
   useEffect(() => {
-    if (apiOk !== true || conversationId != null || loadingList) return;
-    if (conversations.length > 0) {
-      setConversationId(conversations[0].id);
+    if (!settingsOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setSettingsOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [settingsOpen]);
+
+  useEffect(() => {
+    if (!sidebarOpen) setSettingsOpen(false);
+  }, [sidebarOpen]);
+
+  useEffect(() => {
+    if (!sidebarOpen) setContextMenu(null);
+  }, [sidebarOpen]);
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  const handleSidebarChatsContextMenu = useCallback(
+    (e) => {
+      if (settingsOpen) return;
+      if (!sidebarOpen) return;
+      if (!e.target.closest('[data-sidebar-chat-list]')) return;
+      if (e.target.closest('button')) return;
+      e.preventDefault();
+      const row = e.target.closest('[data-conversation-id]');
+      const conversationId = row?.getAttribute('data-conversation-id') || null;
+      setContextMenu({ x: e.clientX, y: e.clientY, conversationId });
+    },
+    [settingsOpen, sidebarOpen],
+  );
+
+  useEffect(() => {
+    if (settingsOpen) setContextMenu(null);
+  }, [settingsOpen]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const onPointerDown = (e) => {
+      if (contextMenuRef.current?.contains(e.target)) return;
+      setContextMenu(null);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    const onScroll = () => setContextMenu(null);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('scroll', onScroll, true);
+    };
+  }, [contextMenu]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setContextMenu(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [contextMenu]);
+
+  useLayoutEffect(() => {
+    if (!contextMenu || !contextMenuRef.current) return;
+    const el = contextMenuRef.current;
+    const r = el.getBoundingClientRect();
+    let left = contextMenu.x;
+    let top = contextMenu.y;
+    if (left + r.width > window.innerWidth - 8) left = window.innerWidth - r.width - 8;
+    if (top + r.height > window.innerHeight - 8) top = window.innerHeight - r.height - 8;
+    left = Math.max(8, left);
+    top = Math.max(8, top);
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+  }, [contextMenu]);
+
+  useLayoutEffect(() => {
+    if (!attachMenuOpen) {
+      setAttachMenuPos(null);
+      return;
     }
-  }, [apiOk, conversationId, conversations, loadingList]);
+    const update = () => {
+      const btn = attachPlusRef.current;
+      if (!btn) return;
+      const r = btn.getBoundingClientRect();
+      const menuWidth = 208;
+      let left = r.left;
+      if (left + menuWidth > window.innerWidth - 8) left = window.innerWidth - menuWidth - 8;
+      left = Math.max(8, left);
+      setAttachMenuPos({ top: r.bottom + 6, left });
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, [attachMenuOpen]);
+
+  useEffect(() => {
+    if (!attachMenuOpen) return;
+    const onPointerDown = (e) => {
+      if (attachControlsRef.current?.contains(e.target)) return;
+      if (attachMenuRef.current?.contains(e.target)) return;
+      setAttachMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+  }, [attachMenuOpen]);
+
+  useEffect(() => {
+    if (!attachMenuOpen) return;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setAttachMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [attachMenuOpen]);
+
+  const copySelectionFromMenu = useCallback(async () => {
+    const t = typeof window !== 'undefined' ? window.getSelection()?.toString().trim() : '';
+    if (!t) return;
+    try {
+      await navigator.clipboard.writeText(t);
+    } catch {
+      /* ignore */
+    }
+    closeContextMenu();
+  }, [closeContextMenu]);
+
+  const openConvoFromMenu = useCallback(() => {
+    if (!contextMenu?.conversationId) return;
+    setErr('');
+    setConversationId(contextMenu.conversationId);
+    closeContextMenu();
+  }, [contextMenu, closeContextMenu]);
+
+  const copyConvoTitleFromMenu = useCallback(async () => {
+    if (!contextMenu?.conversationId) return;
+    const c = conversations.find((x) => x.id === contextMenu.conversationId);
+    if (!c?.title) return;
+    try {
+      await navigator.clipboard.writeText(c.title);
+    } catch {
+      /* ignore */
+    }
+    closeContextMenu();
+  }, [contextMenu, conversations, closeContextMenu]);
+
+  const deleteConvoFromMenu = useCallback(async () => {
+    const id = contextMenu?.conversationId;
+    if (!id) return;
+    setErr('');
+    try {
+      await apiJson(`/chat/conversations/${id}`, { method: 'DELETE' });
+      await refreshConversations();
+      if (conversationId === id) {
+        setConversationId(null);
+        setMessages([]);
+      }
+    } catch (errDel) {
+      setErr(errDel.message || String(errDel));
+    }
+    closeContextMenu();
+  }, [contextMenu, conversationId, refreshConversations, closeContextMenu]);
+
+  const openSettingsFromMenu = useCallback(() => {
+    setSettingsNotice('');
+    setSettingsSection('appearance');
+    setSettingsOpen(true);
+    closeContextMenu();
+  }, [closeContextMenu]);
+
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key === DAILY_USAGE_KEY || e.key === WEEKLY_USAGE_KEY || e.key === null) {
+        setDailyUsage(readDailyUsage());
+        setWeeklyUsage(readWeeklyUsage());
+      }
+      if (e.key === EXTRA_USAGE_KEY || e.key === null) {
+        setExtraUsage(readExtraUsage());
+      }
+      if (e.key === EXTRA_USAGE_CREDITS_KEY || e.key === null) {
+        setExtraUsageCredits(readExtraUsageCredits());
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  useEffect(() => {
+    if (settingsOpen) {
+      setDailyUsage(readDailyUsage());
+      setWeeklyUsage(readWeeklyUsage());
+      setExtraUsage(readExtraUsage());
+      setExtraUsageCredits(readExtraUsageCredits());
+    }
+  }, [settingsOpen]);
+
+  const bumpWeeklyMessages = useCallback((n = 1) => {
+    setWeeklyUsage((prev) => {
+      const weekStart = mondayLocalISO();
+      const base = prev.weekStart === weekStart ? prev : { weekStart, messages: 0 };
+      const next = { weekStart, messages: base.messages + n };
+      writeWeeklyUsage(next);
+      return next;
+    });
+  }, []);
+
+  const bumpDailyMessages = useCallback((n = 1) => {
+    setDailyUsage((prev) => {
+      const day = todayLocalISO();
+      const base = prev.day === day ? prev : { day, messages: 0 };
+      const next = { day, messages: base.messages + n };
+      writeDailyUsage(next);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (!conversationId) return;
@@ -187,6 +713,8 @@ export default function ChatPage() {
       }
       await loadMessages(data.conversationId);
       await refreshConversations();
+      bumpDailyMessages(1);
+      bumpWeeklyMessages(1);
     } catch (e) {
       setErr(e.message || String(e));
       setMessages((m) => [
@@ -204,90 +732,108 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#070708] text-white font-sans selection:bg-white/20">
-      <div className="fixed inset-0 pointer-events-none opacity-[0.35] bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(120,119,198,0.2),transparent)]" />
+    <div className="h-screen overflow-hidden bg-zinc-100 text-zinc-900 dark:bg-[#070708] dark:text-white font-sans selection:bg-zinc-300/40 dark:selection:bg-white/20">
+      <div className="fixed inset-0 pointer-events-none opacity-20 dark:opacity-[0.35] bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(120,119,198,0.2),transparent)]" />
 
-      <header className="relative z-20 border-b border-white/[0.06] px-4 sm:px-8 py-4 flex flex-wrap items-center gap-3">
+      <div
+        className="fixed top-4 right-4 z-40 flex items-center gap-0.5 rounded-full border border-zinc-200/90 bg-white/90 py-1 pl-1 pr-1 shadow-sm backdrop-blur-md dark:border-white/[0.1] dark:bg-[#0c0c0e]/90 dark:shadow-[0_8px_30px_-8px_rgba(0,0,0,0.65)]"
+        role="toolbar"
+        aria-label="Chat toolbar"
+      >
         <button
           type="button"
           onClick={() => setSidebarOpen((o) => !o)}
-          className="inline-flex items-center justify-center rounded-lg border border-white/15 p-2 text-white/70 hover:bg-white/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/25 md:hidden"
+          className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-transparent text-zinc-600 transition-colors hover:bg-zinc-200/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40 dark:text-white/70 dark:hover:bg-white/[0.1] dark:focus-visible:ring-white/25"
           aria-expanded={sidebarOpen}
           aria-label="Toggle chat history"
         >
-          <PanelLeft className="w-5 h-5" aria-hidden />
-        </button>
-        <Link
-          to="/"
-          className="inline-flex items-center gap-2 text-white/45 hover:text-white text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 rounded-md px-1 -ml-1"
-        >
-          <ArrowLeft className="w-4 h-4 shrink-0" aria-hidden />
-          Home
-        </Link>
-        <span className="text-white/20 hidden sm:inline">/</span>
-        <span className="text-sm font-medium text-white/80 flex items-center gap-2">
-          <MessageCircle className="w-4 h-4 text-white/50 shrink-0" aria-hidden />
-          Chat
-        </span>
-        <span className="text-[11px] font-mono text-white/35 uppercase tracking-widest hidden sm:inline">
-          History
-        </span>
-        <Link
-          to="/admin"
-          className="sm:ml-auto text-xs text-white/40 hover:text-white/70 transition-colors"
-        >
-          Admin
-        </Link>
-        <button
-          type="button"
-          onClick={() => setSidebarOpen((o) => !o)}
-          className="hidden md:inline-flex items-center gap-1.5 text-xs text-white/45 hover:text-white/75 rounded-lg border border-white/10 px-2.5 py-1.5"
-        >
-          <PanelLeft className="w-3.5 h-3.5" aria-hidden />
-          Sidebar
+          <PanelLeft className="h-5 w-5" aria-hidden />
         </button>
         <span
-          className={`text-xs font-medium px-2.5 py-1 rounded-full border ${
-            apiOk === true
-              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
-              : 'border-amber-500/35 bg-amber-500/10 text-amber-100'
+          className="flex h-10 w-10 shrink-0 items-center justify-center"
+          title={
+            apiOk === true ? 'API connected' : apiOk === false ? 'API offline' : 'Checking API…'
+          }
+          aria-label={
+            apiOk === true ? 'API connected' : apiOk === false ? 'API offline' : 'Checking API'
+          }
+        >
+          <span
+            className={`h-2.5 w-2.5 rounded-full ${
+              apiOk === true
+                ? 'bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.25)] dark:shadow-[0_0_0_3px_rgba(16,185,129,0.2)]'
+                : apiOk === false
+                  ? 'bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.22)] dark:shadow-[0_0_0_3px_rgba(239,68,68,0.18)]'
+                  : 'bg-amber-400 animate-pulse dark:bg-amber-400/90'
+            }`}
+          />
+        </span>
+        <Link
+          to="/"
+          className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-transparent text-zinc-600 transition-colors hover:bg-zinc-200/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40 dark:text-white/70 dark:hover:bg-white/[0.1] dark:focus-visible:ring-white/25"
+          aria-label="Home"
+        >
+          <Home className="h-5 w-5" aria-hidden />
+        </Link>
+      </div>
+
+      {/* Sidebar column: md+ narrows width when closed; same full height as open. Mobile still slides off. */}
+      <div
+        className={`fixed z-30 left-4 top-4 bottom-4 flex flex-col overflow-hidden transition-[width,transform] duration-200 ease-out ${
+          sidebarOpen ? 'gap-2' : 'gap-2 md:gap-1.5'
+        } ${
+          sidebarOpen
+            ? 'w-[min(18rem,calc(100vw-2rem))] translate-x-0'
+            : 'w-[min(18rem,calc(100vw-2rem))] -translate-x-[calc(100%+1.5rem)] md:w-14 md:translate-x-0'
+        }`}
+      >
+        <aside
+          className={`flex min-h-0 flex-1 flex-col overflow-hidden border border-zinc-200/90 bg-white/95 text-zinc-900 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:border-white/[0.1] dark:bg-[#0c0c0e]/95 dark:text-white dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.85)] ${
+            sidebarOpen ? 'rounded-2xl' : 'rounded-full'
           }`}
         >
-          API {apiOk === true ? 'ok' : apiOk === false ? 'offline' : '…'}
-        </span>
-      </header>
-
-      {/* Floating sidebar */}
-      <aside
-        className={`fixed z-30 top-[4.25rem] bottom-4 left-4 w-[min(18rem,calc(100vw-2rem))] flex flex-col rounded-2xl border border-white/[0.1] bg-[#0c0c0e]/95 backdrop-blur-xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.85)] transition-transform duration-200 ease-out md:top-[4.25rem] ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-[calc(100%+1.5rem)]'
-        }`}
-        aria-hidden={!sidebarOpen}
-      >
-        <div className="shrink-0 p-3 border-b border-white/[0.06] flex items-center justify-between gap-2">
-          <span className="text-xs font-semibold text-white/80 tracking-wide">Chats</span>
+        <div
+          className={`shrink-0 border-b border-zinc-200/80 dark:border-white/[0.06] flex items-center gap-2 ${
+            sidebarOpen ? 'p-3 justify-between' : 'p-3 justify-between max-md:p-3 md:flex-col md:justify-center md:border-0 md:p-2 md:pb-1'
+          }`}
+        >
+          <span
+            className={`text-xs font-semibold text-zinc-700 dark:text-white/80 tracking-wide ${
+              sidebarOpen ? '' : 'md:sr-only'
+            }`}
+          >
+            Chats
+          </span>
           <button
             type="button"
             onClick={newChat}
             disabled={apiOk === false}
-            className="inline-flex items-center gap-1 rounded-lg bg-white text-black text-xs font-medium px-2.5 py-1.5 hover:bg-white/90 disabled:opacity-40"
+            aria-label="New chat"
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white transition-colors hover:bg-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 disabled:pointer-events-none disabled:opacity-40 dark:bg-white dark:text-black dark:hover:bg-white/90 dark:focus-visible:ring-white/30"
           >
-            <Plus className="w-3.5 h-3.5" aria-hidden />
-            New
+            <Plus className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar p-2 space-y-1">
+        <div
+          data-sidebar-chat-list
+          onContextMenu={handleSidebarChatsContextMenu}
+          onScroll={() => setContextMenu(null)}
+          className={`flex-1 min-h-0 overflow-y-auto no-scrollbar p-2 space-y-1 ${
+            sidebarOpen ? '' : 'md:invisible md:pointer-events-none md:select-none'
+          }`}
+        >
           {loadingList && conversations.length === 0 ? (
-            <p className="text-xs text-white/35 px-2 py-3">Loading…</p>
+            <p className="text-xs text-zinc-400 dark:text-white/35 px-2 py-3">Loading…</p>
           ) : null}
           {!loadingList && conversations.length === 0 ? (
-            <p className="text-xs text-white/40 px-2 py-3 leading-relaxed">
+            <p className="text-xs text-zinc-500 dark:text-white/40 px-2 py-3 leading-relaxed">
               No chats yet. Start a new one.
             </p>
           ) : null}
           {conversations.map((c) => (
             <div
               key={c.id}
+              data-conversation-id={c.id}
               role="button"
               tabIndex={0}
               onClick={() => selectConversation(c.id)}
@@ -297,17 +843,17 @@ export default function ChatPage() {
                   selectConversation(c.id);
                 }
               }}
-              className={`group relative w-full text-left rounded-xl px-3 py-2 pr-9 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/25 ${
+              className={`group relative w-full text-left rounded-full px-3 py-2.5 pr-10 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40 dark:focus-visible:ring-white/25 ${
                 conversationId === c.id
-                  ? 'bg-white/[0.1] border border-white/15'
-                  : 'border border-transparent hover:bg-white/[0.05]'
+                  ? 'bg-zinc-200/80 border border-zinc-300/90 dark:bg-white/[0.1] dark:border-white/15'
+                  : 'border border-transparent hover:bg-zinc-100/90 dark:hover:bg-white/[0.05]'
               }`}
             >
-              <p className="text-sm text-white/90 line-clamp-2 leading-snug">{c.title}</p>
+              <p className="text-sm text-zinc-800 dark:text-white/90 line-clamp-2 leading-snug">{c.title}</p>
               <button
                 type="button"
                 onClick={(e) => deleteConversation(c.id, e)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-white/35 hover:text-red-300 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-zinc-400 hover:text-red-600 dark:text-white/35 dark:hover:text-red-300 dark:hover:bg-red-500/10 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                 aria-label="Delete chat"
               >
                 <Trash2 className="w-3.5 h-3.5" aria-hidden />
@@ -315,35 +861,106 @@ export default function ChatPage() {
             </div>
           ))}
         </div>
-        <p
-          className="shrink-0 text-[10px] text-white/25 px-3 py-2 border-t border-white/[0.06] font-mono truncate"
-          title="Chats are stored in a SQLite file on this server. On Railway, mount a volume and set CHAT_DB_PATH to a path inside that volume."
-        >
-          SQLite
-        </p>
-      </aside>
+
+        </aside>
+        {user ? (
+          <div
+            className={`shrink-0 flex items-center rounded-full border border-zinc-200/90 bg-white/95 shadow-[0_8px_30px_-8px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:border-white/[0.1] dark:bg-[#0c0c0e]/95 dark:shadow-[0_8px_30px_-8px_rgba(0,0,0,0.75)] transition-colors hover:bg-zinc-50/90 dark:hover:bg-white/[0.04] ${
+              sidebarOpen ? 'gap-2 px-2.5 py-2.5' : 'gap-2 px-2.5 py-2.5 md:justify-center md:gap-0 md:px-2 md:py-2'
+            }`}
+          >
+            {user.photoURL ? (
+              <img
+                src={user.photoURL}
+                alt=""
+                className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-zinc-300/80 dark:ring-white/15 bg-zinc-200/50 dark:bg-white/10"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-zinc-200 to-zinc-100 text-xs font-semibold text-zinc-700 ring-1 ring-zinc-300/80 dark:from-white/15 dark:to-white/5 dark:text-white/85 dark:ring-white/15"
+                aria-hidden
+              >
+                {accountInitials(user)}
+              </div>
+            )}
+            <div className={`min-w-0 flex-1 ${sidebarOpen ? '' : 'md:hidden'}`}>
+              <p className="truncate text-sm font-medium leading-tight text-zinc-800 dark:text-white/90">
+                {accountDisplayName(user)}
+              </p>
+              <p className="truncate text-[10px] leading-tight text-zinc-500 dark:text-white/35">{user.email}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setSettingsNotice('');
+                setSettingsSection('account');
+                setSettingsOpen(true);
+              }}
+              className={`shrink-0 rounded-full p-2.5 text-zinc-500 transition-colors hover:bg-zinc-200/80 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40 dark:text-white/40 dark:hover:bg-white/[0.1] dark:hover:text-white/75 dark:focus-visible:ring-white/25 ${
+                sidebarOpen ? '' : 'md:hidden'
+              }`}
+              aria-label="Open settings"
+            >
+              <Settings className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
+        ) : (
+          <div
+            className={`shrink-0 border border-zinc-200/90 bg-white/95 shadow-[0_8px_30px_-8px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:border-white/[0.1] dark:bg-[#0c0c0e]/95 dark:shadow-[0_8px_30px_-8px_rgba(0,0,0,0.75)] ${
+              sidebarOpen ? 'space-y-2 rounded-2xl p-3' : 'rounded-full p-2 max-md:space-y-2 max-md:rounded-2xl max-md:p-3 md:flex md:flex-col md:items-center md:justify-center md:gap-0 md:space-y-0'
+            }`}
+          >
+            <div
+              className={`flex items-center justify-between gap-2 rounded-full border border-zinc-200/80 bg-zinc-50/60 dark:border-white/[0.08] dark:bg-white/[0.04] ${
+                sidebarOpen ? 'px-2 py-2' : 'px-2 py-2 max-md:px-2 md:border-0 md:bg-transparent md:p-0'
+              }`}
+            >
+              <span className={`text-xs font-medium text-zinc-600 dark:text-white/50 ${sidebarOpen ? '' : 'md:sr-only'}`}>
+                Display
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSettingsNotice('');
+                  setSettingsSection('appearance');
+                  setSettingsOpen(true);
+                }}
+                className="shrink-0 rounded-full p-2.5 text-zinc-500 transition-colors hover:bg-zinc-200/80 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40 dark:text-white/45 dark:hover:bg-white/[0.08] dark:hover:text-white dark:focus-visible:ring-white/25"
+                aria-label="Theme and display settings"
+              >
+                <Settings className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+            <p className={`px-1 text-[10px] leading-relaxed text-zinc-500 dark:text-white/30 ${sidebarOpen ? '' : 'md:hidden'}`}>
+              Firebase is off — chats stay on this device. Use Display to change the site theme.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Mobile overlay */}
       {sidebarOpen ? (
         <button
           type="button"
-          className="fixed inset-0 z-20 bg-black/50 md:hidden"
+          className="fixed inset-0 z-20 bg-black/30 dark:bg-black/50 md:hidden"
           aria-label="Close sidebar"
           onClick={() => setSidebarOpen(false)}
         />
       ) : null}
 
       <main
-        className={`relative z-10 max-w-2xl mx-auto px-4 sm:px-6 py-8 flex flex-col min-h-[calc(100vh-4.5rem)] transition-[padding] duration-200 ${
-          sidebarOpen ? 'md:pl-[calc(18rem+2.5rem)]' : 'md:pl-4'
+        className={`relative z-10 w-full px-4 sm:px-6 py-6 h-screen min-h-0 overflow-hidden transition-[margin] duration-200 ${
+          sidebarOpen ? 'md:ml-[calc(18rem+2.5rem)]' : 'md:ml-[calc(3.5rem+2.5rem)]'
         }`}
       >
+        <div className="max-w-2xl mx-auto flex flex-col h-full">
         {loadingMessages && conversationId ? (
-          <p className="text-xs text-white/35 mb-2">Loading messages…</p>
+          <p className="text-xs text-zinc-500 dark:text-white/35 mb-2">Loading messages…</p>
         ) : null}
         {!conversationId && apiOk === true && !loadingList ? (
-          <p className="text-sm text-white/45 mb-4">
-            Select a chat or create <strong className="text-white/70">New</strong>.
+          <p className="text-sm text-zinc-600 dark:text-white/45 mb-4">
+            Select a chat or create <strong className="text-zinc-800 dark:text-white/70">New</strong>.
           </p>
         ) : null}
 
@@ -356,15 +973,15 @@ export default function ChatPage() {
               <div
                 className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                   msg.role === 'user'
-                    ? 'bg-white text-black rounded-br-md'
+                    ? 'bg-zinc-900 text-white dark:bg-white dark:text-black rounded-br-md'
                     : msg.error
-                      ? 'bg-red-500/15 text-red-100/90 border border-red-500/25 rounded-bl-md'
-                      : 'bg-white/[0.06] text-white/85 border border-white/[0.08] rounded-bl-md'
+                      ? 'bg-red-500/15 text-red-800 border border-red-500/30 dark:text-red-100/90 dark:border-red-500/25 rounded-bl-md'
+                      : 'bg-white text-zinc-800 border border-zinc-200/90 shadow-sm dark:bg-white/[0.06] dark:text-white/85 dark:border-white/[0.08] dark:shadow-none rounded-bl-md'
                 }`}
               >
                 <p className="whitespace-pre-wrap break-words">{msg.text}</p>
                 {msg.prototype ? (
-                  <p className="mt-2 text-[10px] font-mono uppercase tracking-wider text-white/35">
+                  <p className="mt-2 text-[10px] font-mono uppercase tracking-wider text-zinc-500 dark:text-white/35">
                     prototype reply
                   </p>
                 ) : null}
@@ -373,8 +990,13 @@ export default function ChatPage() {
           ))}
           {sending ? (
             <div className="flex justify-start">
-              <div className="rounded-2xl rounded-bl-md px-4 py-3 bg-white/[0.04] border border-white/[0.06] text-sm text-white/45">
-                …
+              <div className="rounded-2xl rounded-bl-md px-4 py-3 bg-zinc-100 border border-zinc-200/90 text-sm text-zinc-500 flex items-center gap-2 dark:bg-white/[0.04] dark:border-white/[0.06] dark:text-white/40">
+                <span className="inline-flex gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-white/40 animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-white/40 animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-white/40 animate-bounce" style={{ animationDelay: '300ms' }} />
+                </span>
+                Modulon is thinking…
               </div>
             </div>
           ) : null}
@@ -382,37 +1004,442 @@ export default function ChatPage() {
         </div>
 
         {err ? (
-          <p className="text-xs text-red-300/90 mb-2 font-mono whitespace-pre-wrap">{err}</p>
+          <p className="text-xs text-red-600 dark:text-red-300/90 mb-2 font-mono whitespace-pre-wrap">{err}</p>
         ) : null}
 
         <form
-          className="flex gap-2 pt-2 border-t border-white/[0.06]"
+          className="pt-2 border-t border-zinc-200/80 dark:border-white/[0.06]"
           onSubmit={(e) => {
             e.preventDefault();
             send();
           }}
         >
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={conversationId ? 'Type a message…' : 'Pick or start a chat…'}
-            disabled={sending || apiOk === false || !conversationId}
-            className="flex-1 min-w-0 rounded-xl bg-black/40 border border-white/10 px-4 py-3 text-sm text-white/90 placeholder:text-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20 disabled:opacity-45"
-            autoComplete="off"
-            aria-label="Message"
-          />
-          <button
-            type="submit"
-            disabled={sending || !input.trim() || apiOk === false || !conversationId}
-            className="shrink-0 inline-flex items-center justify-center gap-2 bg-white text-black font-medium px-5 py-3 rounded-xl text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/90 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 min-w-[44px] min-h-[44px]"
-            aria-label="Send"
-          >
-            <Send className="w-4 h-4" aria-hidden />
-            <span className="hidden sm:inline">Send</span>
-          </button>
+          <div className="flex w-full items-center gap-0.5 rounded-full border border-zinc-300/90 bg-white px-3 py-1.5 shadow-sm transition-shadow focus-within:border-zinc-400/90 focus-within:ring-2 focus-within:ring-zinc-400/35 dark:border-white/10 dark:bg-black/35 dark:shadow-none dark:focus-within:border-white/20 dark:focus-within:ring-white/15">
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="sr-only"
+              tabIndex={-1}
+              multiple
+              aria-hidden
+            />
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              tabIndex={-1}
+              multiple
+              aria-hidden
+            />
+            <div ref={attachControlsRef} className="relative shrink-0">
+              <button
+                ref={attachPlusRef}
+                type="button"
+                onClick={() => setAttachMenuOpen((o) => !o)}
+                disabled={sending || apiOk === false || !conversationId}
+                aria-expanded={attachMenuOpen}
+                aria-haspopup="menu"
+                aria-label="Add to message"
+                className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-transparent text-zinc-600 transition-colors hover:bg-zinc-200/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 disabled:pointer-events-none disabled:opacity-35 dark:text-white/75 dark:hover:bg-white/[0.1] dark:focus-visible:ring-white/25"
+              >
+                <Plus className="h-5 w-5" aria-hidden strokeWidth={2} />
+              </button>
+            </div>
+            {attachMenuOpen && attachMenuPos ? (
+              <div
+                ref={attachMenuRef}
+                role="menu"
+                aria-label="Add attachment"
+                className="fixed z-[80] w-52 overflow-hidden rounded-xl border border-zinc-200/90 bg-white py-1 text-sm shadow-xl dark:border-white/[0.12] dark:bg-[#121214]"
+                style={{ top: attachMenuPos.top, left: attachMenuPos.left }}
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-zinc-800 hover:bg-zinc-100 dark:text-white/90 dark:hover:bg-white/[0.06]"
+                  onClick={() => {
+                    fileInputRef.current?.click();
+                    setAttachMenuOpen(false);
+                  }}
+                >
+                  <File className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+                  File
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-zinc-800 hover:bg-zinc-100 dark:text-white/90 dark:hover:bg-white/[0.06]"
+                  onClick={() => {
+                    imageInputRef.current?.click();
+                    setAttachMenuOpen(false);
+                  }}
+                >
+                  <Image className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+                  Photo
+                </button>
+              </div>
+            ) : null}
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={conversationId ? 'Type a message…' : 'Pick or start a chat…'}
+              disabled={sending || apiOk === false || !conversationId}
+              className="min-w-0 flex-1 border-0 bg-transparent py-2.5 pl-0.5 pr-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-45 dark:text-white/90 dark:placeholder:text-white/25"
+              autoComplete="off"
+              aria-label="Message"
+            />
+            <button
+              type="submit"
+              disabled={sending || !input.trim() || apiOk === false || !conversationId}
+              className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-transparent text-zinc-600 transition-colors hover:bg-zinc-200/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 disabled:pointer-events-none disabled:opacity-35 dark:text-white/75 dark:hover:bg-white/[0.1] dark:focus-visible:ring-white/25"
+              aria-label="Send"
+            >
+              <Send className="h-5 w-5" aria-hidden strokeWidth={2} />
+            </button>
+          </div>
         </form>
+        </div>
       </main>
+
+      {settingsOpen ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="chat-settings-title"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm dark:bg-black/70"
+            aria-label="Close settings"
+            onClick={() => setSettingsOpen(false)}
+          />
+          <div className="relative z-10 flex h-[min(84vh,640px)] min-h-[min(380px,68vh)] w-full max-w-[min(92vw,56rem)] flex-col overflow-hidden rounded-2xl border border-zinc-200/90 bg-white shadow-[0_24px_80px_rgba(0,0,0,0.12)] dark:border-white/[0.12] dark:bg-[#0e0e10] dark:shadow-[0_24px_80px_rgba(0,0,0,0.9)]">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-200/80 px-4 py-3.5 dark:border-white/[0.08] sm:px-5 sm:py-4">
+              <h2 id="chat-settings-title" className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-white sm:text-xl">
+                Settings
+              </h2>
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(false)}
+                className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40 dark:text-white/45 dark:hover:bg-white/[0.08] dark:hover:text-white dark:focus-visible:ring-white/25"
+                aria-label="Close settings"
+              >
+                <X className="w-5 h-5" aria-hidden />
+              </button>
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+              <nav
+                className="flex shrink-0 flex-row gap-1 overflow-x-auto border-b border-zinc-200/80 p-2 no-scrollbar dark:border-white/[0.08] sm:w-52 sm:flex-col sm:overflow-y-auto sm:border-b-0 sm:border-r sm:p-3"
+                aria-label="Settings sections"
+              >
+                {[
+                  ...(user
+                    ? [
+                        { id: 'account', label: 'Account', Icon: User },
+                        { id: 'security', label: 'Security', Icon: Shield },
+                      ]
+                    : []),
+                  { id: 'appearance', label: 'Appearance', Icon: Palette },
+                  { id: 'usage', label: 'Usage', Icon: BarChart3 },
+                  { id: 'about', label: 'About', Icon: Info },
+                ].map(({ id, label, Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setSettingsSection(id)}
+                    aria-current={settingsSection === id ? 'page' : undefined}
+                    className={`flex shrink-0 items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors sm:w-full ${
+                      settingsSection === id
+                        ? 'bg-zinc-200/90 text-zinc-900 ring-1 ring-zinc-300/80 dark:bg-white/[0.12] dark:text-white dark:ring-white/10'
+                        : 'text-zinc-600 hover:bg-zinc-100/90 hover:text-zinc-900 dark:text-white/50 dark:hover:bg-white/[0.06] dark:hover:text-white/80'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+                    {label}
+                  </button>
+                ))}
+              </nav>
+
+              <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 no-scrollbar">
+                {settingsNotice ? (
+                  <p
+                    className={`mb-5 text-xs font-mono rounded-lg px-3 py-2.5 border ${
+                      settingsNotice.startsWith('Error')
+                        ? 'border-red-500/30 bg-red-500/10 text-red-800 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-200/90'
+                        : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-900 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-200/90'
+                    }`}
+                  >
+                    {settingsNotice}
+                  </p>
+                ) : null}
+
+                {settingsSection === 'account' && user ? (
+                  <div className="space-y-5">
+                    <div>
+                      <p className="mb-3 text-[10px] font-medium uppercase tracking-widest text-zinc-500 dark:text-white/35">
+                        Signed in as
+                      </p>
+                      <div className="flex items-center gap-4 rounded-xl border border-zinc-200/90 bg-zinc-50/80 p-4 dark:border-white/[0.08] dark:bg-black/30">
+                        {user.photoURL ? (
+                          <img
+                            src={user.photoURL}
+                            alt=""
+                            className="h-16 w-16 shrink-0 rounded-full bg-zinc-200 object-cover ring-1 ring-zinc-300/80 dark:bg-white/10 dark:ring-white/15 sm:h-[4.5rem] sm:w-[4.5rem]"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-zinc-200 to-zinc-100 text-base font-semibold text-zinc-700 ring-1 ring-zinc-300/80 dark:from-white/15 dark:to-white/5 dark:text-white/85 dark:ring-white/15 sm:h-[4.5rem] sm:w-[4.5rem] sm:text-lg">
+                            {accountInitials(user)}
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-base font-medium text-zinc-900 dark:text-white sm:text-lg">
+                            {accountDisplayName(user)}
+                          </p>
+                          <p className="mt-0.5 truncate font-mono text-xs text-zinc-500 dark:text-white/40 sm:text-sm">{user.email}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="sm:max-w-md">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSettingsOpen(false);
+                          void signOutUser().then(() => navigate('/', { replace: true }));
+                        }}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-800 hover:bg-red-500/15 dark:text-red-200/90"
+                      >
+                        <LogOut className="h-4 w-4" aria-hidden />
+                        Sign out
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {settingsSection === 'appearance' ? (
+                  <div className="max-w-lg space-y-4">
+                    <p className="text-[10px] font-medium uppercase tracking-widest text-zinc-500 dark:text-white/35">
+                      Color theme
+                    </p>
+                    <p className="text-sm leading-relaxed text-zinc-600 dark:text-white/45">
+                      Choose how Modulon looks across the site. &ldquo;System&rdquo; follows your device light or dark
+                      mode.
+                    </p>
+                    <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Color theme">
+                      {[
+                        { id: 'dark', label: 'Dark', Icon: Moon },
+                        { id: 'light', label: 'Light', Icon: Sun },
+                        { id: 'system', label: 'System', Icon: Monitor },
+                      ].map(({ id, label, Icon }) => (
+                        <button
+                          key={id}
+                          type="button"
+                          role="radio"
+                          aria-checked={theme === id}
+                          onClick={() => setTheme(id)}
+                          className={`inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
+                            theme === id
+                              ? 'border-zinc-900 bg-zinc-900 text-white dark:border-white/25 dark:bg-white/[0.14] dark:text-white'
+                              : 'border-zinc-300/90 text-zinc-700 hover:bg-zinc-100 dark:border-white/15 dark:text-white/75 dark:hover:bg-white/[0.06]'
+                          }`}
+                        >
+                          <Icon className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {settingsSection === 'security' && user ? (
+                  <div className="max-w-lg space-y-4">
+                    <p className="text-[10px] font-medium uppercase tracking-widest text-zinc-500 dark:text-white/35">Password</p>
+                    <p className="text-sm leading-relaxed text-zinc-600 dark:text-white/45">
+                      Sends a password reset link to your account email via Firebase Auth. Use the link in the email
+                      to choose a new password.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setSettingsNotice('');
+                        try {
+                          await sendPasswordReset(user.email);
+                          setSettingsNotice('Check your email for a password reset link.');
+                        } catch (err) {
+                          setSettingsNotice(`Error: ${mapAuthError(err)}`);
+                        }
+                      }}
+                      className="rounded-xl border border-zinc-300/90 px-4 py-3 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-white/15 dark:text-white/80 dark:hover:bg-white/[0.06]"
+                    >
+                      Send password reset email
+                    </button>
+                  </div>
+                ) : null}
+
+                {settingsSection === 'usage' ? (
+                  <div className="w-full space-y-8">
+                    <section className="space-y-4">
+                      <h3 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-white">
+                        Daily Usage
+                      </h3>
+                      <UsageProgressBar
+                        period="daily"
+                        label="Messages you send"
+                        current={dailyUsage.messages}
+                        cap={extraUsage ? DAILY_MESSAGE_CAP_EXTRA : DAILY_MESSAGE_CAP}
+                      />
+                    </section>
+
+                    <div className="h-px bg-gradient-to-r from-transparent via-zinc-200 to-transparent dark:via-white/[0.08]" />
+
+                    <section className="space-y-4">
+                      <h3 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-white">
+                        Weekly Usage
+                      </h3>
+                      <UsageProgressBar
+                        period="weekly"
+                        label="Messages you send"
+                        current={weeklyUsage.messages}
+                        cap={extraUsage ? WEEKLY_MESSAGE_CAP_EXTRA : WEEKLY_MESSAGE_CAP}
+                      />
+                    </section>
+
+                    <div className="h-px bg-gradient-to-r from-transparent via-zinc-200 to-transparent dark:via-white/[0.08]" />
+
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-sm font-medium text-zinc-900 dark:text-white">Extra usage</span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={extraUsage}
+                          aria-label="Extra usage"
+                          onClick={() => {
+                            const next = !extraUsage;
+                            setExtraUsage(next);
+                            writeExtraUsage(next);
+                          }}
+                          className={`flex h-6 w-[3.25rem] shrink-0 items-center rounded-full p-0.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 dark:focus-visible:ring-white/30 ${
+                            extraUsage
+                              ? 'justify-end bg-emerald-600 dark:bg-emerald-500'
+                              : 'justify-start bg-zinc-300 dark:bg-zinc-600'
+                          }`}
+                        >
+                          <span className="pointer-events-none h-5 w-8 rounded-full bg-white shadow-sm ring-1 ring-zinc-900/5 dark:ring-white/10" />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium text-zinc-500 dark:text-white/40">Extra usage credits</p>
+                          <p className="mt-1 font-mono text-xl font-semibold tabular-nums tracking-tight text-zinc-900 dark:text-white">
+                            {formatCreditsMoney(extraUsageCredits)}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSettingsNotice('Buying extra usage is not available yet — no payment is connected.')
+                          }
+                          className="shrink-0 rounded-xl border border-zinc-300/90 px-4 py-2.5 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-white/15 dark:text-white/85 dark:hover:bg-white/[0.06]"
+                        >
+                          Buy more extra usage
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {settingsSection === 'about' ? (
+                  <div className="max-w-lg space-y-3 text-sm leading-relaxed text-zinc-600 dark:text-white/45">
+                    <p className="text-[10px] font-medium uppercase tracking-widest text-zinc-500 dark:text-white/35">Modulon chat</p>
+                    <p>
+                      Conversations are stored for this session and workspace. When Firebase is enabled, your account
+                      is used for sign-in only; manage credentials and recovery from this panel.
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {contextMenu ? (
+        <div
+          ref={contextMenuRef}
+          role="menu"
+          aria-label="Sidebar chat actions"
+          className="fixed z-[99] min-w-[13.5rem] rounded-xl border border-zinc-200/90 bg-white/95 py-1 text-sm shadow-xl backdrop-blur-md dark:border-white/[0.12] dark:bg-[#121214]/95 dark:shadow-[0_16px_48px_rgba(0,0,0,0.55)]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          {(() => {
+            const cmConvo = contextMenu.conversationId
+              ? conversations.find((c) => c.id === contextMenu.conversationId)
+              : null;
+            const sel =
+              typeof window !== 'undefined' ? window.getSelection?.()?.toString().trim() ?? '' : '';
+            return (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!cmConvo}
+                  onClick={openConvoFromMenu}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-zinc-800 hover:bg-zinc-100 disabled:pointer-events-none disabled:opacity-40 dark:text-white/90 dark:hover:bg-white/[0.06]"
+                >
+                  <MessageCircle className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+                  Open chat
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!cmConvo?.title}
+                  onClick={() => void copyConvoTitleFromMenu()}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-zinc-800 hover:bg-zinc-100 disabled:pointer-events-none disabled:opacity-40 dark:text-white/90 dark:hover:bg-white/[0.06]"
+                >
+                  <ClipboardCopy className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+                  Copy title
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!cmConvo}
+                  onClick={() => void deleteConvoFromMenu()}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-red-700 hover:bg-red-500/10 disabled:pointer-events-none disabled:opacity-40 dark:text-red-300 dark:hover:bg-red-500/15"
+                >
+                  <Trash2 className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+                  Delete chat
+                </button>
+                <div className="my-1 h-px bg-zinc-200/80 dark:bg-white/[0.08]" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!sel}
+                  onClick={() => void copySelectionFromMenu()}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-zinc-800 hover:bg-zinc-100 disabled:pointer-events-none disabled:opacity-40 dark:text-white/90 dark:hover:bg-white/[0.06]"
+                >
+                  <Copy className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+                  Copy selection
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={openSettingsFromMenu}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-zinc-800 hover:bg-zinc-100 dark:text-white/90 dark:hover:bg-white/[0.06]"
+                >
+                  <Settings className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+                  Open settings
+                </button>
+              </>
+            );
+          })()}
+        </div>
+      ) : null}
     </div>
   );
 }

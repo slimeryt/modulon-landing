@@ -1,9 +1,13 @@
+# HuggingFace — GPT-2 fine-tuning pipeline
+transformers>=4.40.0
+accelerate>=0.29.0
+
 # Core deep learning framework
 torch>=2.0.0
 torchvision>=0.15.0   # pulled in by torch; listed for completeness
 
-# Cornell Movie Dialogs dataset loader
-convokit>=2.5.0
+# Dialogue corpora (movie, Ubuntu chat logs, Reddit sample, …)
+convokit>=4.0.0
 
 # ConvoKit dependencies (usually auto-installed, listed for reproducibility)
 scipy>=1.9.0

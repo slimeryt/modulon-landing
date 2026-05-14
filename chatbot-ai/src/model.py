@@ -1,19 +1,25 @@
 """
-Sequence-to-Sequence model built with PyTorch.
+Sequence-to-Sequence model with Bahdanau Attention built with PyTorch.
 
 Architecture
 ────────────
 Encoder
   ├─ Embedding  (vocab_size → embed_dim)
   └─ LSTM       (embed_dim → hidden_dim, num_layers deep)
+       └─ returns ALL timestep outputs + final (hidden, cell)
+
+Attention (Bahdanau / additive)
+  Aligns each decoder step to relevant encoder positions instead of relying
+  on a single compressed context vector.
 
 Decoder
   ├─ Embedding  (vocab_size → embed_dim)
-  ├─ LSTM       (embed_dim → hidden_dim, num_layers deep)
-  └─ Linear     (hidden_dim → vocab_size)  ← output logits
+  ├─ Attention  (scores over encoder outputs)
+  ├─ LSTM       (embed_dim + hidden_dim → hidden_dim)  ← concat embed + context
+  └─ Linear     (hidden_dim*2 + embed_dim → vocab_size) ← concat out+context+embed
 
 Seq2Seq
-  Wires encoder → decoder and applies teacher forcing during training.
+  Wires encoder → attention → decoder and applies teacher forcing during training.
   At inference time teacher_forcing_ratio=0.0 so the decoder uses its own
   previous prediction at every step.
 """
@@ -22,13 +28,38 @@ import torch
 import torch.nn as nn
 
 
+class Attention(nn.Module):
+    """
+    Bahdanau (additive) attention.
+
+    Computes a soft alignment between the current decoder hidden state
+    and every encoder output timestep, returning a weighted context vector.
+    """
+
+    def __init__(self, hidden_dim: int):
+        super().__init__()
+        self.attn = nn.Linear(hidden_dim * 2, hidden_dim)
+        self.v    = nn.Linear(hidden_dim, 1, bias=False)
+
+    def forward(
+        self,
+        hidden: torch.Tensor,      # (batch, hidden_dim)  — last decoder layer
+        enc_out: torch.Tensor,     # (batch, src_len, hidden_dim)
+    ) -> torch.Tensor:             # returns (batch, src_len) attention weights
+        src_len = enc_out.shape[1]
+        # Expand hidden to match encoder length
+        h = hidden.unsqueeze(1).expand(-1, src_len, -1)          # (batch, src_len, H)
+        energy = torch.tanh(self.attn(torch.cat([h, enc_out], dim=2)))  # (batch, src_len, H)
+        scores = self.v(energy).squeeze(2)                        # (batch, src_len)
+        return torch.softmax(scores, dim=1)                       # (batch, src_len)
+
+
 class Encoder(nn.Module):
     """
-    Encodes the input sentence into a context vector (hidden, cell).
+    Encodes the input sentence.
 
-    The final hidden and cell states of the LSTM are passed directly to
-    the Decoder as its initial state, acting as the compressed
-    representation of the source sentence.
+    Returns ALL timestep hidden states (enc_out) in addition to the final
+    (hidden, cell) so that the attention decoder can align to any position.
     """
 
     def __init__(
@@ -46,7 +77,6 @@ class Encoder(nn.Module):
             hidden_dim,
             num_layers=num_layers,
             batch_first=True,
-            # Dropout is applied between LSTM layers, not after the last one
             dropout=dropout if num_layers > 1 else 0.0,
         )
         self.dropout = nn.Dropout(dropout)
@@ -54,21 +84,21 @@ class Encoder(nn.Module):
     def forward(self, src: torch.Tensor):
         """
         Args:
-            src: (batch, src_seq_len) – padded token indices
+            src: (batch, src_seq_len)
 
         Returns:
-            hidden: (num_layers, batch, hidden_dim)
-            cell:   (num_layers, batch, hidden_dim)
+            enc_out: (batch, src_seq_len, hidden_dim)  — all timestep outputs
+            hidden:  (num_layers, batch, hidden_dim)
+            cell:    (num_layers, batch, hidden_dim)
         """
-        embedded = self.dropout(self.embedding(src))          # (batch, seq, embed)
-        _, (hidden, cell) = self.lstm(embedded)
-        return hidden, cell
+        embedded = self.dropout(self.embedding(src))        # (batch, seq, embed)
+        enc_out, (hidden, cell) = self.lstm(embedded)
+        return enc_out, hidden, cell
 
 
 class Decoder(nn.Module):
     """
-    Generates one output token per call given the previous token and
-    the encoder's context state.
+    Generates one output token per call using attention over encoder outputs.
     """
 
     def __init__(
@@ -81,52 +111,58 @@ class Decoder(nn.Module):
     ):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
+        self.attention  = Attention(hidden_dim)
+        # LSTM input = embedding + attention context
         self.lstm = nn.LSTM(
-            embed_dim,
+            embed_dim + hidden_dim,
             hidden_dim,
             num_layers=num_layers,
             batch_first=True,
             dropout=dropout if num_layers > 1 else 0.0,
         )
-        self.fc_out = nn.Linear(hidden_dim, vocab_size)
+        # Output projection: richer input = decoder out + context + embedding
+        self.fc_out = nn.Linear(hidden_dim * 2 + embed_dim, vocab_size)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, token: torch.Tensor, hidden: torch.Tensor, cell: torch.Tensor):
+    def forward(
+        self,
+        token: torch.Tensor,       # (batch,)
+        hidden: torch.Tensor,      # (num_layers, batch, hidden_dim)
+        cell: torch.Tensor,        # (num_layers, batch, hidden_dim)
+        enc_out: torch.Tensor,     # (batch, src_len, hidden_dim)
+    ):
         """
-        Args:
-            token:  (batch,)                 – current input token index
-            hidden: (num_layers, batch, hidden_dim)
-            cell:   (num_layers, batch, hidden_dim)
-
         Returns:
-            logits: (batch, vocab_size)      – un-normalised scores for next token
+            logits: (batch, vocab_size)
             hidden: updated hidden state
             cell:   updated cell state
         """
-        token = token.unsqueeze(1)                            # (batch, 1)
-        embedded = self.dropout(self.embedding(token))        # (batch, 1, embed)
-        output, (hidden, cell) = self.lstm(embedded, (hidden, cell))
-        logits = self.fc_out(output.squeeze(1))               # (batch, vocab_size)
+        token = token.unsqueeze(1)                                   # (batch, 1)
+        embedded = self.dropout(self.embedding(token))               # (batch, 1, embed)
+
+        # Attend to encoder outputs using the last decoder hidden layer
+        attn_w  = self.attention(hidden[-1], enc_out)                # (batch, src_len)
+        context = (attn_w.unsqueeze(1) @ enc_out)                    # (batch, 1, H)
+
+        lstm_in = torch.cat([embedded, context], dim=2)              # (batch, 1, embed+H)
+        out, (hidden, cell) = self.lstm(lstm_in, (hidden, cell))     # out: (batch, 1, H)
+
+        # Concat decoder output + context + embedding for richer prediction
+        pred   = torch.cat([out, context, embedded], dim=2)          # (batch, 1, 2H+embed)
+        logits = self.fc_out(pred.squeeze(1))                        # (batch, vocab_size)
         return logits, hidden, cell
 
 
 class Seq2Seq(nn.Module):
     """
-    Combines Encoder + Decoder into one trainable module.
-
-    Teacher Forcing
-    ───────────────
-    During training (teacher_forcing_ratio > 0), at each decoder step there
-    is a `teacher_forcing_ratio` probability of feeding the *ground-truth*
-    next token instead of the decoder's own prediction. This stabilises
-    early training by preventing error accumulation.
+    Combines Encoder + Attention + Decoder into one trainable module.
     """
 
     def __init__(self, encoder: Encoder, decoder: Decoder, device: torch.device):
         super().__init__()
         self.encoder = encoder
         self.decoder = decoder
-        self.device = device
+        self.device  = device
 
     def forward(
         self,
@@ -134,35 +170,24 @@ class Seq2Seq(nn.Module):
         trg: torch.Tensor,
         teacher_forcing_ratio: float = 0.5,
     ) -> torch.Tensor:
-        """
-        Args:
-            src: (batch, src_len)  – encoder input
-            trg: (batch, trg_len)  – decoder target (incl. <SOS> at index 0)
-            teacher_forcing_ratio: probability of using ground-truth token
-
-        Returns:
-            outputs: (batch, trg_len, vocab_size) – logits at each decoder step
-        """
         batch_size = src.size(0)
-        trg_len = trg.size(1)
+        trg_len    = trg.size(1)
         vocab_size = self.decoder.fc_out.out_features
 
         outputs = torch.zeros(batch_size, trg_len, vocab_size, device=self.device)
 
-        hidden, cell = self.encoder(src)
+        enc_out, hidden, cell = self.encoder(src)
 
-        # Seed the decoder with the <SOS> token (index 1) from the target
-        dec_input = trg[:, 0]  # (batch,)
+        dec_input = trg[:, 0]   # <SOS>
 
         for t in range(1, trg_len):
-            logits, hidden, cell = self.decoder(dec_input, hidden, cell)
+            logits, hidden, cell = self.decoder(dec_input, hidden, cell, enc_out)
             outputs[:, t] = logits
 
-            # Decide whether to use ground-truth or predicted token next
             if torch.rand(1).item() < teacher_forcing_ratio:
-                dec_input = trg[:, t]           # teacher forcing: ground truth
+                dec_input = trg[:, t]
             else:
-                dec_input = logits.argmax(dim=1)  # free running: model prediction
+                dec_input = logits.argmax(dim=1)
 
         return outputs
 
@@ -175,19 +200,8 @@ def build_model(
     dropout: float = 0.3,
     device: str = "cpu",
 ) -> Seq2Seq:
-    """
-    Convenience factory: build and return a fully initialised Seq2Seq model.
-
-    Args:
-        vocab_size: total number of tokens including special tokens
-        embed_dim:  word embedding dimensionality
-        hidden_dim: LSTM hidden state size
-        num_layers: number of stacked LSTM layers
-        dropout:    dropout probability (applied to embeddings and between LSTM layers)
-        device:     'cpu' or 'cuda'
-    """
+    """Build and return a fully initialised Seq2Seq model with attention."""
     _device = torch.device(device)
     encoder = Encoder(vocab_size, embed_dim, hidden_dim, num_layers, dropout)
     decoder = Decoder(vocab_size, embed_dim, hidden_dim, num_layers, dropout)
-    model = Seq2Seq(encoder, decoder, _device).to(_device)
-    return model
+    return Seq2Seq(encoder, decoder, _device).to(_device)

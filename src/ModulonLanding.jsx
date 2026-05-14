@@ -4,9 +4,26 @@ import {
   ArrowRight,
   Cpu,
   Github,
+  LogOut,
+  MessageCircle,
   Twitter,
   ChevronRight,
 } from 'lucide-react';
+import { useAuth } from './AuthContext';
+
+// ─── Brand diagonal-l glyph (Anthropic-i style) ──────────────────────────────
+function BrandL({ style = {} }) {
+  return (
+    <svg
+      aria-hidden="true"
+      style={{ display: 'inline-block', width: '0.48em', height: '1em', verticalAlign: '-0.08em', ...style }}
+      viewBox="0 0 48 100"
+      fill="currentColor"
+    >
+      <line x1="13" y1="2" x2="38" y2="97" stroke="currentColor" strokeWidth="8" strokeLinecap="round" fill="none" />
+    </svg>
+  );
+}
 
 const GLOBE_PX = 1000;
 const GLOBE_R  = 462;
@@ -277,11 +294,11 @@ function RotatingTypingText({
 
   return (
     <p
-      className="text-xl md:text-2xl text-white/85 font-mono tracking-tight mb-6 min-h-[2.5rem] md:min-h-[3rem]"
+      className="text-xl md:text-2xl text-zinc-600 dark:text-white/85 font-mono tracking-tight mb-6 min-h-[2.5rem] md:min-h-[3rem]"
       aria-live="polite"
     >
       {line}
-      <span className="inline-block w-[2px] h-[1.05em] ml-0.5 bg-white/70 align-[-0.1em] animate-pulse" />
+      <span className="inline-block w-[2px] h-[1.05em] ml-0.5 bg-zinc-800/60 align-[-0.1em] animate-pulse dark:bg-white/70" />
     </p>
   );
 }
@@ -293,33 +310,126 @@ const HERO_TYPING_PHRASES = [
 ];
 
 function Navbar() {
+  const [scrolled, setScrolled] = useState(false);
+  const { firebaseConfigured, user, signOutUser } = useAuth();
+
+  const authPillShell =
+    'inline-flex shrink-0 items-stretch rounded-full border border-zinc-300/90 bg-white/80 shadow-sm backdrop-blur-sm transition-[border-color,box-shadow] duration-200 hover:border-zinc-400/90 dark:border-white/[0.12] dark:bg-[#0c0c0e]/80 dark:shadow-[0_4px_20px_-8px_rgba(0,0,0,0.5)] dark:hover:border-white/25';
+  const authPillSeg =
+    'flex min-w-10 items-center justify-center py-2 text-zinc-700 transition-colors duration-200 hover:bg-zinc-200/90 hover:text-zinc-900 focus:outline-none focus-visible:relative focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-zinc-400/40 focus-visible:ring-offset-0 dark:text-white/85 dark:hover:bg-white/[0.1] dark:hover:text-white dark:focus-visible:ring-white/25';
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 60);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 border-b border-white/10 backdrop-blur-md bg-black/60">
-      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Cpu className="w-5 h-5 text-white" strokeWidth={1.5} />
-          <span className="text-white font-semibold tracking-tight text-lg">Modulon</span>
-          <span className="text-white/30 text-xs font-mono ml-1">v0.1.0</span>
+    <>
+      {/* Full navbar — fades out on scroll */}
+      <nav
+        className="fixed top-0 left-0 right-0 z-50 border-b border-zinc-200/90 bg-white/80 backdrop-blur-md dark:border-white/10 dark:bg-black/60"
+        style={{
+          opacity: scrolled ? 0 : 1,
+          transform: scrolled ? 'translateY(-10px)' : 'translateY(0)',
+          pointerEvents: scrolled ? 'none' : 'auto',
+          transition: 'opacity 400ms ease, transform 400ms cubic-bezier(0.16,1,0.3,1)',
+        }}
+      >
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Cpu className="w-5 h-5 text-zinc-800 dark:text-white" strokeWidth={1.5} />
+            <span className="text-zinc-900 dark:text-white font-semibold tracking-tight text-lg">Modulon</span>
+            <span className="text-zinc-600 dark:text-white/30 text-xs font-mono ml-1">v0.1.0</span>
+          </div>
+          <div className="hidden md:flex items-center gap-8">
+            {['About', 'Docs'].map((l) => (
+              <a key={l} href={`#${l.toLowerCase()}`} className="text-zinc-600 dark:text-white/50 text-sm hover:text-zinc-900 dark:hover:text-white transition-colors duration-200 cursor-pointer">{l}</a>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2">
+              {firebaseConfigured && user ? (
+                <>
+                  <span className="hidden sm:inline text-xs text-zinc-600 dark:text-white/45 max-w-[12rem] truncate" title={user.email || ''}>
+                    {user.email}
+                  </span>
+                  <div className={authPillShell} role="group" aria-label="Chat and account">
+                    <Link
+                      to="/chat"
+                      aria-label="Chat"
+                      className={`${authPillSeg} group rounded-l-full pl-2.5 pr-2`}
+                    >
+                      <span className="flex items-center overflow-hidden transition-transform duration-300 ease-out will-change-transform group-hover:-translate-x-1">
+                        <MessageCircle className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+                        <span
+                          className="text-sm font-medium whitespace-nowrap max-w-0 overflow-hidden opacity-0 transition-[max-width,opacity,margin] duration-300 ease-out group-hover:max-w-[4rem] group-hover:opacity-100 group-hover:ml-2"
+                          aria-hidden
+                        >
+                          Chat
+                        </span>
+                      </span>
+                    </Link>
+                    <span
+                      className="pointer-events-none self-center h-5 w-px shrink-0 rounded-full bg-zinc-300/80 dark:bg-white/15"
+                      aria-hidden
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void signOutUser()}
+                      aria-label="Sign out"
+                      className={`${authPillSeg} group rounded-r-full pl-2 pr-2.5`}
+                    >
+                      <span className="flex flex-row-reverse items-center overflow-hidden transition-transform duration-300 ease-out will-change-transform group-hover:translate-x-1">
+                        <LogOut className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+                        <span
+                          className="text-sm font-medium whitespace-nowrap max-w-0 overflow-hidden opacity-0 transition-[max-width,opacity,margin] duration-300 ease-out group-hover:max-w-[6rem] group-hover:opacity-100 group-hover:mr-2"
+                          aria-hidden
+                        >
+                          Sign out
+                        </span>
+                      </span>
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    className="text-zinc-600 dark:text-white/60 text-sm font-medium px-4 py-2 rounded-md border border-zinc-300/90 hover:border-zinc-400 hover:text-zinc-900 dark:border-white/15 dark:hover:border-white/35 dark:hover:text-white transition-all duration-200 cursor-pointer"
+                  >
+                    Log in
+                  </Link>
+                  <Link
+                    to="/signup"
+                    className="bg-white text-black text-sm font-semibold px-4 py-2 rounded-md hover:bg-white/90 transition-colors duration-200 cursor-pointer flex items-center gap-1.5"
+                  >
+                    Get Started <ChevronRight className="w-3.5 h-3.5" />
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
         </div>
+      </nav>
 
-        <div className="hidden md:flex items-center gap-8">
-          {['About', 'Docs'].map((l) => (
-            <a
-              key={l}
-              href={`#${l.toLowerCase()}`}
-              className="text-white/50 text-sm hover:text-white transition-colors duration-200 cursor-pointer"
-            >
-              {l}
-            </a>
-          ))}
-        </div>
-
-        <button className="bg-white text-black text-sm font-semibold px-4 py-2 rounded-md hover:bg-white/90 transition-colors duration-200 cursor-pointer flex items-center gap-1.5">
-          Get Started
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </nav>
+      {/* Collapsed logo — appears in top-left on scroll */}
+      <Link
+        to="/"
+        className="fixed top-4 left-5 z-50 flex items-center gap-1.5 group"
+        style={{
+          opacity: scrolled ? 1 : 0,
+          transform: scrolled ? 'translateY(0)' : 'translateY(-10px)',
+          pointerEvents: scrolled ? 'auto' : 'none',
+          transition: 'opacity 400ms ease, transform 400ms cubic-bezier(0.16,1,0.3,1)',
+        }}
+      >
+        <Cpu className="w-4 h-4 text-zinc-600 dark:text-white/60 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors" strokeWidth={1.5} />
+        <span className="text-zinc-600 dark:text-white/60 group-hover:text-zinc-900 dark:group-hover:text-white text-sm font-semibold tracking-tight transition-colors">
+          Modulon
+        </span>
+      </Link>
+    </>
   );
 }
 
@@ -330,7 +440,7 @@ function Hero() {
       className="relative min-h-screen flex items-center overflow-hidden"
       style={{
         background:
-          'radial-gradient(ellipse 80% 60% at 20% 50%, rgba(255,255,255,0.04) 0%, transparent 70%), #0a0a0a',
+          'radial-gradient(ellipse 80% 60% at 20% 50%, rgba(255,255,255,0.04) 0%, transparent 70%)',
       }}
     >
       <div
@@ -344,21 +454,15 @@ function Hero() {
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 pt-24 pb-16 w-full flex items-center">
         <div className="flex-1 max-w-xl">
-          <h1 className="text-6xl md:text-7xl font-bold tracking-tight leading-none text-white mb-6 font-sans">
-            <span
-              style={{
-                background: 'linear-gradient(135deg, #ffffff 30%, rgba(255,255,255,0.45))',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-              }}
-            >
+          <h1 className="text-6xl md:text-7xl font-bold tracking-tight leading-none mb-6 font-sans">
+            <span className="bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-500 bg-clip-text text-transparent dark:from-white dark:via-white dark:to-white/45">
               Modulon.
             </span>
           </h1>
 
           <RotatingTypingText phrases={HERO_TYPING_PHRASES} />
 
-          <p className="text-white/50 text-lg leading-relaxed mb-10 max-w-md">
+          <p className="text-zinc-600 dark:text-white/50 text-lg leading-relaxed mb-10 max-w-md">
             An AI chatbot trained entirely from scratch on real human conversation —
             no pretrained weights, no black-box APIs. Just raw dialogue, a neural network,
             and time.
@@ -367,13 +471,23 @@ function Hero() {
           <div className="flex items-center gap-4 flex-wrap">
             <Link
               to="/chat"
-              className="bg-white text-black font-semibold px-6 py-3 rounded-md hover:bg-white/90 transition-all duration-200 cursor-pointer flex items-center gap-2 text-sm"
+              className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black shadow-sm backdrop-blur-sm transition-all duration-200 hover:bg-white/90 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 dark:focus-visible:ring-white/30"
             >
               Start Chatting
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="h-4 w-4 shrink-0" aria-hidden />
             </Link>
-            <button className="border border-white/20 text-white/70 font-medium px-6 py-3 rounded-md hover:border-white/50 hover:text-white transition-all duration-200 cursor-pointer flex items-center gap-2 text-sm">
-              <Github className="w-4 h-4" />
+            <Link
+              to="/signup"
+              className="inline-flex items-center gap-2 rounded-full border border-zinc-300/90 bg-white/60 px-6 py-3 text-sm font-medium text-zinc-800 shadow-sm backdrop-blur-sm transition-all duration-200 hover:border-zinc-400 hover:bg-white/90 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 dark:border-white/20 dark:bg-white/[0.06] dark:text-white/80 dark:hover:border-white/45 dark:hover:bg-white/[0.1] dark:hover:text-white dark:focus-visible:ring-white/30"
+            >
+              Get started
+              <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
+            </Link>
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-full border border-zinc-300/90 bg-white/60 px-6 py-3 text-sm font-medium text-zinc-800 shadow-sm backdrop-blur-sm transition-all duration-200 hover:border-zinc-400 hover:bg-white/90 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 dark:border-white/20 dark:bg-white/[0.06] dark:text-white/80 dark:hover:border-white/45 dark:hover:bg-white/[0.1] dark:hover:text-white dark:focus-visible:ring-white/30"
+            >
+              <Github className="h-4 w-4 shrink-0" aria-hidden />
               View Source
             </button>
           </div>
@@ -381,7 +495,7 @@ function Hero() {
       </div>
 
       <div
-        className="absolute z-[5] right-0 top-1/2 pointer-events-none select-none"
+        className="fixed z-[1] right-0 top-1/2 pointer-events-none select-none"
         style={{
           transform:
             'translateY(-50%) translateX(max(28%, calc(64px + 8vw)))',
@@ -398,8 +512,158 @@ function Hero() {
         <DottedGlobe />
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none"
+      <div
+        className="absolute bottom-0 left-0 right-0 h-32 pointer-events-none dark:hidden"
+        style={{ background: 'linear-gradient(to bottom, transparent, rgb(244 244 245))' }}
+      />
+      <div
+        className="absolute bottom-0 left-0 right-0 hidden h-32 pointer-events-none dark:block"
         style={{ background: 'linear-gradient(to bottom, transparent, #0a0a0a)' }}
+      />
+
+      {/* Scroll indicator */}
+      <button
+        onClick={() => document.getElementById('northstar').scrollIntoView({ behavior: 'smooth' })}
+        className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2 cursor-pointer group"
+        aria-label="Scroll to Project Northstar"
+      >
+        <span className="text-xs font-mono tracking-widest uppercase text-zinc-500 transition-colors group-hover:text-zinc-700 dark:text-white/20 dark:group-hover:text-white/40">
+          scroll
+        </span>
+        <svg
+          className="h-4 w-4 text-zinc-500 transition-colors animate-bounce group-hover:text-zinc-700 dark:text-white/20 dark:group-hover:text-white/50"
+          fill="none" viewBox="0 0 16 16" stroke="currentColor" strokeWidth="1.5"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 3v10M3 9l5 5 5-5" />
+        </svg>
+      </button>
+    </section>
+  );
+}
+
+// ─── Scroll-reveal hook ───────────────────────────────────────────────────────
+function useReveal(threshold = 0.2) {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
+      { threshold }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+  return [ref, visible];
+}
+
+// ─── North Star SVG ───────────────────────────────────────────────────────────
+function NorthStar({ size = 64 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      {/* 4-point star */}
+      <path
+        d="M32 2 L35 29 L62 32 L35 35 L32 62 L29 35 L2 32 L29 29 Z"
+        fill="white"
+        opacity="0.9"
+      />
+      {/* Subtle glow ring */}
+      <circle cx="32" cy="32" r="28" stroke="white" strokeWidth="0.5" opacity="0.12" />
+    </svg>
+  );
+}
+
+// ─── Project Northstar section ────────────────────────────────────────────────
+function ProjectNorthstar() {
+  const [ref, visible] = useReveal(0.15);
+
+  const pillars = [
+    {
+      icon: '◈',
+      title: 'Transformer Core',
+      desc: 'A full attention-based architecture built from the ground up — no shortcuts.',
+    },
+    {
+      icon: '◉',
+      title: 'Long-Term Memory',
+      desc: 'Persistent context across sessions so conversations actually build on each other.',
+    },
+    {
+      icon: '◎',
+      title: 'Multilingual',
+      desc: 'Trained on dialogue from multiple languages, starting with English and German.',
+    },
+  ];
+
+  return (
+    <section
+      id="northstar"
+      className="relative z-10 overflow-hidden py-40 px-6 bg-zinc-200/30 backdrop-blur-[2px] dark:bg-[#0a0a0a]/80"
+    >
+      {/* Radial glow behind star */}
+      <div
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+        style={{
+          width: 600,
+          height: 600,
+          background: 'radial-gradient(circle, rgba(255,255,255,0.055) 0%, transparent 65%)',
+        }}
+      />
+
+      {/* Horizontal rule top */}
+      <div
+        className="absolute top-0 left-0 right-0 h-px"
+        style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)' }}
+      />
+
+      {/* Everything fades in as one block */}
+      <div
+        ref={ref}
+        className="relative z-10 max-w-3xl mx-auto flex flex-col items-center text-center gap-10"
+        style={{
+          opacity: visible ? 1 : 0,
+          transform: visible ? 'translateY(0)' : 'translateY(24px)',
+          transition: 'opacity 900ms ease, transform 900ms cubic-bezier(0.16,1,0.3,1)',
+        }}
+      >
+        {/* Badge */}
+        <span className="inline-flex items-center gap-2 rounded-full border border-zinc-300/90 px-4 py-1.5 font-mono text-xs uppercase tracking-widest text-zinc-600 dark:border-white/15 dark:text-white/40">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-400 dark:bg-white/30" />
+          In Development
+        </span>
+
+        <NorthStar size={56} />
+
+        <h2 className="bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-500 bg-clip-text pb-[0.12em] text-5xl font-bold leading-none tracking-tight text-transparent md:text-7xl dark:from-white dark:via-white dark:to-white/35">
+          Project Northstar
+        </h2>
+
+        <p className="text-zinc-600 dark:text-white/40 text-lg leading-relaxed max-w-lg">
+          The next generation of Modulon. A full transformer architecture, persistent memory,
+          and multilingual reasoning — trained entirely from scratch.
+        </p>
+
+        <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+          {pillars.map(({ icon, title, desc }) => (
+            <div
+              key={title}
+              className="flex flex-col gap-3 rounded-xl border border-zinc-200/90 bg-white/90 p-6 text-left shadow-sm dark:border-white/10 dark:bg-[#111111] dark:shadow-none"
+            >
+              <span className="text-xl font-mono text-zinc-500 dark:text-white/30">{icon}</span>
+              <span className="text-sm font-semibold text-zinc-800 dark:text-white/80">{title}</span>
+              <span className="text-sm leading-relaxed text-zinc-600 dark:text-white/35">{desc}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-2 h-12 w-px bg-gradient-to-b from-zinc-400/40 to-transparent dark:from-white/20" />
+      </div>
+
+      {/* Horizontal rule bottom */}
+      <div
+        className="absolute bottom-0 left-0 right-0 h-px"
+        style={{ background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent)' }}
       />
     </section>
   );
@@ -407,30 +671,30 @@ function Hero() {
 
 function Footer() {
   return (
-    <footer className="bg-[#0a0a0a] border-t border-white/8 px-6 py-10">
+    <footer className="relative z-10 border-t border-zinc-200 bg-zinc-100 px-6 py-10 dark:border-white/8 dark:bg-[#0a0a0a]">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-          <Cpu className="w-4 h-4 text-white/30" strokeWidth={1.5} />
-          <span className="text-white/30 text-sm">Modulon v0.1.0</span>
+          <Cpu className="w-4 h-4 text-zinc-600 dark:text-white/30" strokeWidth={1.5} />
+          <span className="text-zinc-600 dark:text-white/30 text-sm">Modulon v0.1.0</span>
         </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-white/20 text-xs font-mono">
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-zinc-600 dark:text-white/20 text-xs font-mono">
           <span>
             © {new Date().getFullYear()} Modulon · Trained on Cornell Movie Dialogs · MIT License
           </span>
           <Link
             to="/chat"
-            className="text-white/35 hover:text-white/70 transition-colors"
+            className="text-zinc-500 transition-colors hover:text-zinc-800 dark:text-white/35 dark:hover:text-white/70"
           >
             Chat (prototype)
           </Link>
         </div>
 
         <div className="flex items-center gap-4">
-          <a href="#" className="text-white/25 hover:text-white/60 transition-colors duration-200 cursor-pointer">
+          <a href="#" className="cursor-pointer text-zinc-500 transition-colors duration-200 hover:text-zinc-800 dark:text-white/25 dark:hover:text-white/60">
             <Github className="w-4 h-4" />
           </a>
-          <a href="#" className="text-white/25 hover:text-white/60 transition-colors duration-200 cursor-pointer">
+          <a href="#" className="cursor-pointer text-zinc-500 transition-colors duration-200 hover:text-zinc-800 dark:text-white/25 dark:hover:text-white/60">
             <Twitter className="w-4 h-4" />
           </a>
         </div>
@@ -440,10 +704,16 @@ function Footer() {
 }
 
 export default function ModulonLanding() {
+  useEffect(() => {
+    document.documentElement.style.scrollBehavior = 'smooth';
+    return () => { document.documentElement.style.scrollBehavior = ''; };
+  }, []);
+
   return (
-    <div className="bg-[#0a0a0a] min-h-screen font-sans antialiased">
+    <div className="bg-zinc-100 text-zinc-900 dark:bg-[#0a0a0a] dark:text-white min-h-screen font-sans antialiased">
       <Navbar />
       <Hero />
+      <ProjectNorthstar />
       <Footer />
     </div>
   );

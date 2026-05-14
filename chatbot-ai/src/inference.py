@@ -24,14 +24,15 @@ from src.preprocess import (
 )
 
 # Must match the values used in train.py
-EMBED_DIM  = 256
+EMBED_DIM = 256
 HIDDEN_DIM = 512
 NUM_LAYERS = 2
 DROPOUT    = 0.0   # disable dropout at inference time
 
 MAX_RESPONSE_LEN = 20
 
-DECODE_TEMPERATURE = 0.85
+# Lower = less random; 0 = greedy argmax (most stable, can repeat).
+DECODE_TEMPERATURE = 0.35
 DECODE_TOP_K = 40
 DECODE_REPEAT_LOGIT_PENALTY = 2.25
 DECODE_REPEAT_WINDOW = 4
@@ -79,14 +80,15 @@ def _sample_token_id(
 ) -> int:
     """Temperature + top-k sampling with extra penalty on recently chosen ids (reduces loops)."""
     logits = logits.float().squeeze(0).clone()
-    if temperature > 1e-6:
-        logits = logits / temperature
     for idx in recent_ids:
         if 0 <= idx < logits.numel():
             logits[idx] -= repeat_penalty
     if top_k > 0 and top_k < logits.numel():
         thresh = torch.topk(logits, top_k).values[-1]
         logits = torch.where(logits < thresh, torch.full_like(logits, float("-inf")), logits)
+    if temperature <= 1e-6:
+        return int(torch.argmax(logits, dim=-1).item())
+    logits = logits / temperature
     probs = torch.softmax(logits, dim=-1)
     return int(torch.multinomial(probs, 1).item())
 
@@ -119,8 +121,8 @@ def generate_response(
     src = torch.tensor([encoded], dtype=torch.long, device=device)
 
     with torch.no_grad():
-        # Encode the input
-        hidden, cell = model.encoder(src)
+        # Encode the input — attention model returns all timestep outputs too
+        enc_out, hidden, cell = model.encoder(src)
 
         # Start decoding from <SOS>
         dec_input = torch.tensor([SOS_IDX], dtype=torch.long, device=device)
@@ -128,7 +130,7 @@ def generate_response(
         response_tokens = []
         recent_preds: list = []
         for _ in range(max_len):
-            logits, hidden, cell = model.decoder(dec_input, hidden, cell)
+            logits, hidden, cell = model.decoder(dec_input, hidden, cell, enc_out)
             pred_idx = _sample_token_id(
                 logits,
                 temperature=temperature,
@@ -220,7 +222,7 @@ class Chatbot:
         self.optimizer.zero_grad()
 
         # Full teacher forcing during online updates for stability
-        output = self.model(src, trg, teacher_forcing_ratio=1.0)
+        output = self.model(src, trg, teacher_forcing_ratio=1.0)  # attention handled inside Seq2Seq
 
         vocab_size   = self.model.decoder.fc_out.out_features
         output_flat  = output[:, 1:].reshape(-1, vocab_size)

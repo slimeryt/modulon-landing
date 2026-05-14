@@ -1,641 +1,194 @@
-import cors from 'cors';
-import dotenv from 'dotenv';
-import express from 'express';
-import { execFile, spawn } from 'child_process';
-import fs from 'fs';
-import path from 'path';
+/**
+ * Modulon Chat API — Express + SQLite + Python inference bridge
+ *
+ * Routes:
+ *   GET  /api/health
+ *   GET  /api/chat/conversations
+ *   POST /api/chat/conversations
+ *   GET  /api/chat/conversations/:id/messages
+ *   DEL  /api/chat/conversations/:id
+ *   POST /api/chat   { message, conversationId? }
+ *
+ * Run:  node server/train-api.mjs
+ *       npm run dev:all   (Vite + API together)
+ */
+
+import express   from 'express';
+import Database  from 'better-sqlite3';
+import { spawn } from 'child_process';
+import path      from 'path';
 import { fileURLToPath } from 'url';
-import { createChatStore, openChatDatabase } from './chat-db.mjs';
+import dotenv    from 'dotenv';
+
+dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Node does not load `.env` by itself (Vite does for the client only).
-dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
+const ROOT      = path.join(__dirname, '..');
+/** Default avoids Windows Hyper-V excluded ranges that often block low ports (e.g. 3001). Override with API_PORT in `.env`. */
+const DEFAULT_PORT = 4310;
+const PORT      = Number(process.env.API_PORT || DEFAULT_PORT);
+/** Bind address. Default 127.0.0.1 avoids Windows EACCES on 0.0.0.0 for some reserved port ranges. Use 0.0.0.0 in production if needed. */
+const HOST      = process.env.API_HOST || '127.0.0.1';
+const DB_PATH   = process.env.CHAT_DB_PATH
+  || path.join(ROOT, 'chatbot-ai', 'chat.db');
 
-const CHATBOT_ROOT = path.resolve(__dirname, '../chatbot-ai');
-const TRAIN_CONFIG_PATH = path.join(CHATBOT_ROOT, 'models', 'train_config.json');
-const BEST_METRICS_PATH = path.join(CHATBOT_ROOT, 'models', 'best_metrics.json');
-/**
- * Chat DB is SQLite (single file). Local default: project `data/chat.sqlite`.
- * On Railway, if you mount persistent storage at `/app/data`, we default to
- * `/app/data/chat.sqlite` when `RAILWAY_ENVIRONMENT` is set (override with CHAT_DB_PATH).
- */
-const CHAT_DB_PATH = (() => {
-  const raw = process.env.CHAT_DB_PATH?.trim();
-  if (raw) {
-    return path.isAbsolute(raw) ? raw : path.resolve(__dirname, '..', raw);
-  }
-  if (process.env.RAILWAY_ENVIRONMENT) {
-    return '/app/data/chat.sqlite';
-  }
-  return path.join(__dirname, '..', 'data', 'chat.sqlite');
-})();
-
-const CHAT_WELCOME =
-  'Hi. This is a chat prototype. Send a message—the server returns a placeholder until you wire up the model.';
-
-/** @type {ReturnType<createChatStore> | null} */
-let chatStore = null;
-
-function getChatStore() {
-  if (!chatStore) {
-    const db = openChatDatabase(CHAT_DB_PATH);
-    chatStore = createChatStore(db);
-  }
-  return chatStore;
-}
-
-const DEFAULT_TRAIN_CONFIG = {
-  embed_dim: 256,
-  hidden_dim: 512,
-  num_layers: 2,
-  dropout: 0.3,
-  batch_size: 64,
-  num_epochs: 15,
-  learning_rate: 5e-4,
-  lr_min: 1e-6,
-  clip: 1.0,
-  max_pairs: 65000,
-  weight_decay: 1e-4,
-  label_smooth: 0.05,
-  teacher_forcing: 0.5,
-  use_decaying_teacher_forcing: false,
-  teacher_forcing_start: 0.78,
-  teacher_forcing_end: 0.52,
-  plateau_patience: 2,
-  plateau_factor: 0.5,
-};
-
-const INT_TRAIN_KEYS = new Set([
-  'embed_dim',
-  'hidden_dim',
-  'num_layers',
-  'batch_size',
-  'num_epochs',
-  'max_pairs',
-  'plateau_patience',
-]);
-
-function normalizeTrainConfig(body) {
-  const m = { ...DEFAULT_TRAIN_CONFIG };
-  if (!body || typeof body !== 'object') return clampTrainConfig(m);
-  for (const key of Object.keys(DEFAULT_TRAIN_CONFIG)) {
-    if (body[key] === undefined || body[key] === null || body[key] === '') continue;
-    if (key === 'use_decaying_teacher_forcing') {
-      m[key] = body[key] === true || body[key] === 'true';
-      continue;
-    }
-    if (INT_TRAIN_KEYS.has(key)) {
-      const n = parseInt(String(body[key]), 10);
-      if (Number.isFinite(n)) m[key] = n;
-      continue;
-    }
-    const n = Number(body[key]);
-    if (Number.isFinite(n)) m[key] = n;
-  }
-  return clampTrainConfig(m);
-}
-
-function clampTrainConfig(m) {
-  const o = { ...m };
-  o.num_layers = Math.min(8, Math.max(1, o.num_layers));
-  o.embed_dim = Math.min(4096, Math.max(32, o.embed_dim));
-  o.hidden_dim = Math.min(8192, Math.max(32, o.hidden_dim));
-  o.batch_size = Math.min(2048, Math.max(1, o.batch_size));
-  o.num_epochs = Math.min(500, Math.max(1, o.num_epochs));
-  o.max_pairs = Math.min(2_000_000, Math.max(1000, o.max_pairs));
-  o.dropout = Math.min(0.95, Math.max(0.0, o.dropout));
-  o.label_smooth = Math.min(1.0, Math.max(0.0, o.label_smooth));
-  o.teacher_forcing = Math.min(1.0, Math.max(0.0, o.teacher_forcing));
-  o.teacher_forcing_start = Math.min(1.0, Math.max(0.0, o.teacher_forcing_start));
-  o.teacher_forcing_end = Math.min(1.0, Math.max(0.0, o.teacher_forcing_end));
-  o.plateau_patience = Math.min(50, Math.max(0, o.plateau_patience));
-  o.plateau_factor = Math.min(1.0, Math.max(0.01, o.plateau_factor));
-  o.learning_rate = Math.min(1.0, Math.max(1e-8, o.learning_rate));
-  o.lr_min = Math.min(o.learning_rate, Math.max(1e-12, o.lr_min));
-  o.clip = Math.min(100.0, Math.max(0.0, o.clip));
-  o.weight_decay = Math.min(10.0, Math.max(0.0, o.weight_decay));
-  return o;
-}
-
-function readTrainConfigFile() {
-  if (!fs.existsSync(TRAIN_CONFIG_PATH)) {
-    return { ...DEFAULT_TRAIN_CONFIG };
-  }
-  try {
-    const raw = JSON.parse(fs.readFileSync(TRAIN_CONFIG_PATH, 'utf8'));
-    return normalizeTrainConfig(raw);
-  } catch {
-    return { ...DEFAULT_TRAIN_CONFIG };
-  }
-}
-
-function writeTrainConfig(cfg) {
-  fs.mkdirSync(path.dirname(TRAIN_CONFIG_PATH), { recursive: true });
-  fs.writeFileSync(TRAIN_CONFIG_PATH, `${JSON.stringify(cfg, null, 2)}\n`, 'utf8');
-}
-
-/** @returns {{ best_loss: number, best_epoch: number, updatedAt: string } | null} */
-function readBestMetrics() {
-  if (!fs.existsSync(BEST_METRICS_PATH)) return null;
-  try {
-    const raw = JSON.parse(fs.readFileSync(BEST_METRICS_PATH, 'utf8'));
-    if (!raw || typeof raw !== 'object') return null;
-    const loss = Number(raw.best_loss);
-    const epoch = Number(raw.best_epoch);
-    if (!Number.isFinite(loss) || !Number.isFinite(epoch)) return null;
-    const st = fs.statSync(BEST_METRICS_PATH);
-    return {
-      best_loss: loss,
-      best_epoch: Math.trunc(epoch),
-      updatedAt: st.mtime.toISOString(),
-    };
-  } catch {
-    return null;
-  }
-}
-
-/** Railway and other hosts set PORT; local dev can use TRAIN_API_PORT (e.g. 5182). */
-const PORT = Number(process.env.PORT || process.env.TRAIN_API_PORT || 5182);
-const SECRET = process.env.ADMIN_TRAIN_SECRET || '';
-
-const AUTO_TRAIN_AT = (process.env.AUTO_TRAIN_AT || '').trim();
-const AUTO_TRAIN_REPEAT_DAILY = process.env.AUTO_TRAIN_REPEAT_DAILY === '1';
-const AUTO_TRAIN_ON_START = process.env.AUTO_TRAIN_ON_START === '1';
-const AUTO_TRAIN_ON_START_DELAY_MS = Number(process.env.AUTO_TRAIN_ON_START_DELAY_MS || 12_000);
-
+// ── Express ───────────────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: true }));
-
-let child = null;
-const logLines = [];
-const MAX_LINES = 4000;
-
-let currentStartedAt = null;
-let currentPid = null;
-/** @type {{ startedAt: string, endedAt: string, exitCode: number | null, signal: string | null } | null} */
-let lastRun = null;
-
-let autoTrainTimer = null;
-
-/** When true, a new `train.py` run starts after the current one exits (until /train/stop or manual start). */
-let continuousTraining = false;
-
-/**
- * Python for `train.py`: PYTHON env, then project `.venv`, then `/usr/bin/python3` (Railway apt),
- * else `python3` / `python` on PATH.
- */
-function pythonExe() {
-  const fromEnv = process.env.PYTHON?.trim();
-  if (fromEnv) return fromEnv;
-  const root = path.join(__dirname, '..');
-  const venvPy =
-    process.platform === 'win32'
-      ? path.join(root, '.venv', 'Scripts', 'python.exe')
-      : path.join(root, '.venv', 'bin', 'python');
-  if (fs.existsSync(venvPy)) return venvPy;
-  const usr = '/usr/bin/python3';
-  if (process.platform !== 'win32' && fs.existsSync(usr)) return usr;
-  return process.platform === 'win32' ? 'python' : 'python3';
-}
-
-function pushLog(text) {
-  for (const line of String(text).split(/\r?\n/)) {
-    if (line.length) logLines.push(line);
-  }
-  while (logLines.length > MAX_LINES) logLines.shift();
-}
-
-function requireAuth(req, res, next) {
-  if (!SECRET) return next();
-  const h = req.headers.authorization || '';
-  const tok = h.startsWith('Bearer ') ? h.slice(7) : '';
-  if (tok !== SECRET) return res.status(401).json({ error: 'Unauthorized' });
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
-}
+});
 
-function parseAtHHMM(s) {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(s);
-  if (!m) return null;
-  const hour = Number(m[1]);
-  const minute = Number(m[2]);
-  if (hour > 23 || minute > 59 || Number.isNaN(hour) || Number.isNaN(minute)) return null;
-  return { hour, minute };
-}
-
-function msUntilNextLocal(hour, minute) {
-  const now = new Date();
-  const t = new Date(now);
-  t.setSeconds(0, 0);
-  t.setHours(hour, minute, 0, 0);
-  if (t.getTime() <= now.getTime()) t.setDate(t.getDate() + 1);
-  return t.getTime() - now.getTime();
-}
-
-function clearAutoTrainTimer() {
-  if (autoTrainTimer) {
-    clearTimeout(autoTrainTimer);
-    autoTrainTimer = null;
-  }
-}
-
-function scheduleAutoTrainArm() {
-  clearAutoTrainTimer();
-  if (!AUTO_TRAIN_AT) return;
-  const parsed = parseAtHHMM(AUTO_TRAIN_AT);
-  if (!parsed) {
-    console.warn('[train-api] AUTO_TRAIN_AT must be HH:MM (24h)');
-    return;
-  }
-  const ms = msUntilNextLocal(parsed.hour, parsed.minute);
-  console.log(
-    `[train-api] AUTO_TRAIN_AT ${AUTO_TRAIN_AT} -> first trigger in ${Math.round(ms / 60_000)} min`,
+// ── SQLite ────────────────────────────────────────────────────────────────────
+const db = new Database(DB_PATH);
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
+db.exec(`
+  CREATE TABLE IF NOT EXISTS conversations (
+    id         TEXT PRIMARY KEY,
+    title      TEXT NOT NULL DEFAULT 'New Chat',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
-  autoTrainTimer = setTimeout(() => {
-    autoTrainTimer = null;
-    const r = beginTraining({ clearLog: true, source: 'AUTO_TRAIN_AT' });
-    if (!r.ok) {
-      pushLog(`[train-api] AUTO_TRAIN_AT skipped (${r.error})`);
-      if (AUTO_TRAIN_REPEAT_DAILY && AUTO_TRAIN_AT) scheduleAutoTrainArm();
-    }
-  }, ms);
-}
+  CREATE TABLE IF NOT EXISTS messages (
+    id              TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    role            TEXT NOT NULL CHECK(role IN ('user','assistant')),
+    body            TEXT NOT NULL,
+    prototype       INTEGER DEFAULT 0,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+  );
+`);
 
-function maybeRestartContinuous() {
-  if (!continuousTraining) return;
-  pushLog('[train-api] continuous: starting next run...');
-  setImmediate(() => {
-    const r = beginTraining({ clearLog: false, source: 'continuous_loop' });
-    if (!r.ok) {
-      pushLog(`[train-api] continuous: stopped (${r.error})`);
-      continuousTraining = false;
-    }
-  });
-}
+const q = {
+  listConvos:   db.prepare(`SELECT id,title,created_at,updated_at FROM conversations ORDER BY updated_at DESC LIMIT 100`),
+  insertConvo:  db.prepare(`INSERT INTO conversations (id,title) VALUES (?,?)`),
+  deleteConvo:  db.prepare(`DELETE FROM conversations WHERE id=?`),
+  listMessages: db.prepare(`SELECT id,role,body,prototype,created_at FROM messages WHERE conversation_id=? ORDER BY created_at ASC`),
+  insertMsg:    db.prepare(`INSERT INTO messages (id,conversation_id,role,body,prototype) VALUES (?,?,?,?,?)`),
+  msgCount:     db.prepare(`SELECT COUNT(*) as n FROM messages WHERE conversation_id=?`),
+  updateTitle:  db.prepare(`UPDATE conversations SET title=? WHERE id=?`),
+  touchConvo:   db.prepare(`UPDATE conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?`),
+};
 
-function onTrainProcessClosed(code, signal) {
-  pushLog(`[train-api] exited code=${code} signal=${signal ?? 'none'}`);
-  lastRun = {
-    startedAt: currentStartedAt,
-    endedAt: new Date().toISOString(),
-    exitCode: code,
-    signal: signal ?? null,
-  };
-  child = null;
-  currentStartedAt = null;
-  currentPid = null;
-  if (continuousTraining) {
-    maybeRestartContinuous();
-  } else if (AUTO_TRAIN_AT && AUTO_TRAIN_REPEAT_DAILY) {
-    scheduleAutoTrainArm();
-  }
-}
+// ── Python inference bridge ───────────────────────────────────────────────────
+let pythonProc   = null;
+let pendingQueue = [];
+let stdoutBuf    = '';
+let pythonReady  = false;
 
-function onTrainProcessError(err) {
-  pushLog(`[train-api] spawn error: ${err.message}`);
-  if (err && err.code === 'ENOENT') {
-    pushLog(
-      '[train-api] No Python on PATH (ENOENT). Railway: redeploy with nixpacks.toml (apt python3 + .venv); check deploy logs for pip errors. Set PYTHON to a full path if needed. Local: install Python 3.',
-    );
-  }
-  lastRun = {
-    startedAt: currentStartedAt,
-    endedAt: new Date().toISOString(),
-    exitCode: null,
-    signal: null,
-  };
-  child = null;
-  currentStartedAt = null;
-  currentPid = null;
-  if (continuousTraining) {
-    pushLog('[train-api] continuous: retrying in 3s...');
-    setTimeout(() => {
-      if (!continuousTraining) return;
-      const r = beginTraining({ clearLog: false, source: 'continuous_retry' });
-      if (!r.ok) {
-        continuousTraining = false;
-        pushLog('[train-api] continuous: aborted after spawn error');
+function startPython() {
+  const script = path.join(ROOT, 'chatbot-ai', 'gpt2', 'api_server.py');
+  const cwd    = path.join(ROOT, 'chatbot-ai');
+
+  console.log('[python] Starting inference server…');
+  pythonProc = spawn('python', [script], { cwd, stdio: ['pipe','pipe','pipe'] });
+
+  pythonProc.stdout.on('data', (chunk) => {
+    stdoutBuf += chunk.toString();
+    const lines = stdoutBuf.split('\n');
+    stdoutBuf = lines.pop();
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      let obj;
+      try { obj = JSON.parse(line); } catch { continue; }
+      if (obj.status === 'ready') {
+        pythonReady = true;
+        console.log('[python] Model ready ✓');
+        continue;
       }
-    }, 3000);
-  } else if (AUTO_TRAIN_AT && AUTO_TRAIN_REPEAT_DAILY) {
-    scheduleAutoTrainArm();
-  }
-}
-
-/**
- * @param {{ clearLog?: boolean, source?: string }} opts
- * @returns {{ ok: true } | { ok: false, error: string }}
- */
-function beginTraining(opts = {}) {
-  const { clearLog = true, source = 'api' } = opts;
-  if (child) return { ok: false, error: 'already_running' };
-  if (clearLog) logLines.length = 0;
-  else {
-    pushLog('');
-    pushLog(`[train-api] --- next run --- ${new Date().toISOString()}`);
-  }
-  pushLog(`[train-api] start (${source}) ${new Date().toISOString()}`);
-  pushLog(`[train-api] cwd: ${CHATBOT_ROOT}`);
-
-  const py = pythonExe();
-  const env = {
-    ...process.env,
-    PYTHONUNBUFFERED: '1',
-    TRAIN_CONFIG: TRAIN_CONFIG_PATH,
-  };
-  child = spawn(py, ['-u', 'src/train.py'], {
-    cwd: CHATBOT_ROOT,
-    env,
-    shell: false,
-    windowsHide: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
+      const pending = pendingQueue.shift();
+      if (pending) {
+        clearTimeout(pending.timer);
+        pending.resolve(obj.response ?? '…');
+      }
+    }
   });
 
-  currentStartedAt = new Date().toISOString();
-  currentPid = child.pid ?? null;
-
-  child.stdout.on('data', (d) => pushLog(d));
-  child.stderr.on('data', (d) => pushLog(d));
-  child.on('close', (code, signal) => onTrainProcessClosed(code, signal));
-  child.on('error', (err) => onTrainProcessError(err));
-
-  return { ok: true };
+  pythonProc.stderr.on('data', (d) => process.stderr.write('[python] ' + d));
+  pythonProc.on('exit', (code) => {
+    console.log(`[python] Exited (code ${code})`);
+    pythonReady = false;
+    pythonProc  = null;
+    for (const p of pendingQueue) { clearTimeout(p.timer); p.reject(new Error('Python exited')); }
+    pendingQueue = [];
+  });
 }
 
-function autoTrainMeta() {
-  return {
-    at: AUTO_TRAIN_AT || null,
-    repeatDaily: AUTO_TRAIN_REPEAT_DAILY,
-    onStart: AUTO_TRAIN_ON_START,
-    onStartDelayMs: AUTO_TRAIN_ON_START ? AUTO_TRAIN_ON_START_DELAY_MS : null,
-  };
+function askPython(message) {
+  return new Promise((resolve, reject) => {
+    if (!pythonProc || !pythonReady) {
+      return reject(new Error('Model not ready — train first or wait for it to load.'));
+    }
+    const timer = setTimeout(() => {
+      pendingQueue = pendingQueue.filter((p) => p.resolve !== resolve);
+      reject(new Error('Inference timed out (30s)'));
+    }, 30_000);
+    pendingQueue.push({ resolve, reject, timer });
+    pythonProc.stdin.write(JSON.stringify({ message }) + '\n');
+  });
 }
 
-function statusPayload() {
-  const tail = logLines.slice(-800);
-  return {
-    running: child !== null,
-    continuousTraining,
-    startedAt: currentStartedAt,
-    pid: currentPid,
-    lastRun,
-    logLineCount: logLines.length,
-    log: tail.join('\n'),
-    bestMetrics: readBestMetrics(),
-    meta: {
-      cwd: CHATBOT_ROOT,
-      command: `${pythonExe()} -u src/train.py`,
-      apiPort: PORT,
-      platform: process.platform,
-      autoTrain: autoTrainMeta(),
-    },
-  };
-}
-
+// ── Routes ────────────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
-  res.json({
-    ok: true,
-    trainApi: true,
-    chat: { sqlitePath: CHAT_DB_PATH },
-    meta: {
-      cwd: CHATBOT_ROOT,
-      command: `${pythonExe()} -u src/train.py`,
-      apiPort: PORT,
-      autoTrain: autoTrainMeta(),
-    },
-  });
+  res.json({ ok: true, modelReady: pythonReady });
 });
 
-app.post('/api/train/start', requireAuth, (req, res) => {
-  continuousTraining = false;
-  const r = beginTraining({ clearLog: true, source: 'manual' });
-  if (!r.ok) return res.status(409).json({ error: 'Training already running' });
-  return res.json({ ok: true, continuousTraining });
+app.get('/api/chat/conversations', (_req, res) => {
+  res.json({ conversations: q.listConvos.all() });
 });
 
-app.post('/api/train/start-continuous', requireAuth, (_req, res) => {
-  continuousTraining = true;
-  if (child) {
-    return res.json({
-      ok: true,
-      continuousTraining: true,
-      message: 'Loop enabled; will start next run after this one finishes',
-    });
-  }
-  const r = beginTraining({ clearLog: true, source: 'continuous' });
-  if (!r.ok) {
-    continuousTraining = false;
-    return res.status(409).json({ error: 'Training already running' });
-  }
-  return res.json({ ok: true, continuousTraining: true });
+app.post('/api/chat/conversations', (_req, res) => {
+  const id = crypto.randomUUID();
+  q.insertConvo.run(id, 'New Chat');
+  res.json({ id });
 });
 
-app.post('/api/train/stop', requireAuth, (_req, res) => {
-  continuousTraining = false;
-  if (!child) {
-    return res.json({ ok: true, message: 'No training process', continuousTraining: false });
+app.get('/api/chat/conversations/:id/messages', (req, res) => {
+  res.json({ messages: q.listMessages.all(req.params.id) });
+});
+
+app.delete('/api/chat/conversations/:id', (req, res) => {
+  q.deleteConvo.run(req.params.id);
+  res.json({ ok: true });
+});
+
+app.post('/api/chat', async (req, res) => {
+  const { message, conversationId } = req.body ?? {};
+  if (!message?.trim()) return res.status(400).json({ error: 'Empty message' });
+
+  let convId = conversationId;
+  if (!convId) {
+    convId = crypto.randomUUID();
+    q.insertConvo.run(convId, message.slice(0, 60));
   }
-  const proc = child;
-  const pid = proc.pid;
+
+  q.insertMsg.run(crypto.randomUUID(), convId, 'user', message, 0);
+
+  if (q.msgCount.get(convId).n === 1) {
+    q.updateTitle.run(message.slice(0, 60), convId);
+  }
+
+  let reply;
+  let proto = false;
   try {
-    if (process.platform === 'win32' && pid) {
-      execFile(
-        'taskkill',
-        ['/PID', String(pid), '/T', '/F'],
-        { windowsHide: true },
-        () => {
-          /* 'close' on proc clears child; taskkill may fail if already exited */
-        },
-      );
-    } else {
-      proc.kill('SIGTERM');
-    }
-  } catch (_) {
-    try {
-      proc.kill('SIGTERM');
-    } catch (_) {
-      /* ignore */
-    }
+    reply = await askPython(message);
+  } catch (err) {
+    reply = `⚠ ${err.message}`;
+    proto = true;
   }
-  return res.json({ ok: true, message: 'Stop requested', continuousTraining: false });
+
+  q.insertMsg.run(crypto.randomUUID(), convId, 'assistant', reply, proto ? 1 : 0);
+  q.touchConvo.run(convId);
+
+  res.json({ conversationId: convId, response: reply });
 });
 
-app.get('/api/train/status', requireAuth, (_req, res) => {
-  res.json(statusPayload());
-});
-
-app.get('/api/train/config', requireAuth, (_req, res) => {
-  res.json({
-    config: readTrainConfigFile(),
-    defaults: { ...DEFAULT_TRAIN_CONFIG },
-    path: TRAIN_CONFIG_PATH,
-  });
-});
-
-app.put('/api/train/config', requireAuth, (req, res) => {
-  const cfg = normalizeTrainConfig(req.body);
-  try {
-    writeTrainConfig(cfg);
-    res.json({ ok: true, config: cfg });
-  } catch (e) {
-    res.status(500).json({ error: String(e?.message || e) });
-  }
-});
-
-app.post('/api/train/config/reset', requireAuth, (_req, res) => {
-  try {
-    if (fs.existsSync(TRAIN_CONFIG_PATH)) {
-      fs.unlinkSync(TRAIN_CONFIG_PATH);
-    }
-    res.json({ ok: true, config: { ...DEFAULT_TRAIN_CONFIG } });
-  } catch (e) {
-    res.status(500).json({ error: String(e?.message || e) });
-  }
-});
-
-app.get('/api/chat/conversations', requireAuth, (_req, res) => {
-  try {
-    const conversations = getChatStore().listConversations();
-    res.json({ conversations });
-  } catch (e) {
-    res.status(500).json({ error: String(e?.message || e) });
-  }
-});
-
-app.get('/api/chat/conversations/:id/messages', requireAuth, (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isFinite(id) || id < 1) {
-    return res.status(400).json({ error: 'invalid conversation id' });
-  }
-  try {
-    const chat = getChatStore();
-    if (!chat.conversationExists(id)) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    const messages = chat.getMessages(id);
-    res.json({ conversationId: id, messages });
-  } catch (e) {
-    console.error('[chat] GET messages', e);
-    res.status(500).json({ error: String(e?.message || e) });
-  }
-});
-
-app.post('/api/chat/conversations', requireAuth, (_req, res) => {
-  try {
-    const chat = getChatStore();
-    const id = chat.createConversation();
-    chat.appendMessage(id, 'assistant', CHAT_WELCOME, 0);
-    res.json({ id });
-  } catch (e) {
-    res.status(500).json({ error: String(e?.message || e) });
-  }
-});
-
-app.delete('/api/chat/conversations/:id', requireAuth, (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isFinite(id) || id < 1) {
-    return res.status(400).json({ error: 'invalid conversation id' });
-  }
-  try {
-    getChatStore().deleteConversation(id);
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ error: String(e?.message || e) });
-  }
-});
-
-app.patch('/api/chat/conversations/:id', requireAuth, (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  if (!Number.isFinite(id) || id < 1) {
-    return res.status(400).json({ error: 'invalid conversation id' });
-  }
-  try {
-    const ok = getChatStore().renameConversation(id, req.body?.title);
-    if (!ok) return res.status(400).json({ error: 'invalid title' });
-    res.json({ ok: true });
-  } catch (e) {
-    console.error('[chat] PATCH conversation', e);
-    res.status(500).json({ error: String(e?.message || e) });
-  }
-});
-
-/** Prototype chat: persists to SQLite; replace reply with Python inference when ready. */
-app.post('/api/chat', requireAuth, (req, res) => {
-  const msg = String(req.body?.message ?? '').trim();
-  if (!msg) {
-    return res.status(400).json({ error: 'message required' });
-  }
-  let convId = req.body?.conversationId;
-  convId =
-    convId != null && convId !== '' ? parseInt(String(convId), 10) : Number.NaN;
-  try {
-    const chat = getChatStore();
-    if (!Number.isFinite(convId) || convId < 1) {
-      convId = chat.createConversation();
-      chat.appendMessage(convId, 'assistant', CHAT_WELCOME, 0);
-    } else if (!chat.conversationExists(convId)) {
-      return res.status(404).json({ error: 'conversation not found' });
-    }
-    chat.maybeSetTitleFromFirstUser(convId, msg);
-    chat.appendMessage(convId, 'user', msg, 0);
-    const preview = msg.length > 160 ? `${msg.slice(0, 160)}...` : msg;
-    const reply = `Prototype: received your message (${preview}). Next step: call inference from this route or a dedicated chat service.`;
-    chat.appendMessage(convId, 'assistant', reply, 1);
-    res.json({ prototype: true, reply, conversationId: convId });
-  } catch (e) {
-    console.error('[chat] POST /api/chat', e);
-    res.status(500).json({ error: String(e?.message || e) });
-  }
-});
-
-const DIST_DIR = path.join(__dirname, '..', 'dist');
-if (fs.existsSync(DIST_DIR)) {
-  app.use(express.static(DIST_DIR));
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api')) return next();
-    // Missing built files must 404 — do not send HTML (breaks CSS/JS MIME and "styles don't load").
-    if (path.extname(req.path)) return next();
-    res.sendFile(path.join(DIST_DIR, 'index.html'));
-  });
-}
-
-app.listen(PORT, '0.0.0.0', () => {
-  try {
-    getChatStore();
-  } catch (e) {
-    console.error('[fatal] could not open chat sqlite:', CHAT_DB_PATH, e);
-    process.exit(1);
-  }
-  console.log(`train-api listening on http://127.0.0.1:${PORT}`);
-  console.log(`chat sqlite: ${CHAT_DB_PATH}`);
-  console.log(`train python: ${pythonExe()}`);
-  if (!SECRET) {
-    console.warn('train-api: ADMIN_TRAIN_SECRET not set — /api/train is open to this machine');
-  }
-  if (AUTO_TRAIN_ON_START) {
-    const d = Number.isFinite(AUTO_TRAIN_ON_START_DELAY_MS) ? AUTO_TRAIN_ON_START_DELAY_MS : 12_000;
-    console.log(`[train-api] AUTO_TRAIN_ON_START: will begin training in ${d} ms`);
-    setTimeout(() => {
-      const r = beginTraining({ clearLog: true, source: 'AUTO_TRAIN_ON_START' });
-      if (!r.ok) console.warn(`[train-api] AUTO_TRAIN_ON_START skipped: ${r.error}`);
-    }, d);
-  }
-  if (AUTO_TRAIN_AT) {
-    if (AUTO_TRAIN_REPEAT_DAILY) scheduleAutoTrainArm();
-    else {
-      const parsed = parseAtHHMM(AUTO_TRAIN_AT);
-      if (!parsed) console.warn('[train-api] AUTO_TRAIN_AT invalid, expected HH:MM');
-      else {
-        const ms = msUntilNextLocal(parsed.hour, parsed.minute);
-        console.log(
-          `[train-api] AUTO_TRAIN_AT ${AUTO_TRAIN_AT} (once) in ${Math.round(ms / 60_000)} min`,
-        );
-        autoTrainTimer = setTimeout(() => {
-          autoTrainTimer = null;
-          const r = beginTraining({ clearLog: true, source: 'AUTO_TRAIN_AT' });
-          if (!r.ok) pushLog(`[train-api] AUTO_TRAIN_AT skipped (${r.error})`);
-        }, ms);
-      }
-    }
-  }
-});
+// ── Boot ──────────────────────────────────────────────────────────────────────
+startPython();
+app.listen(PORT, HOST, () => console.log(`\nModulon API → http://${HOST}:${PORT}\n`));

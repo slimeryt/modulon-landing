@@ -121,12 +121,12 @@ def build_vocab(pairs: list, min_freq: int = MIN_WORD_FREQ) -> dict:
     return vocab
 
 
-def preprocess(max_pairs: int = 50000) -> tuple:
+def preprocess(max_pairs: int = 2_000_000) -> tuple:
     """
     Full preprocessing pipeline.
 
     Args:
-        max_pairs: How many raw pairs to consider (subset for speed).
+        max_pairs: Max raw pairs to read from pairs.json (default high; use less for quick tests).
 
     Returns:
         (encoded_pairs, vocab) where encoded_pairs is a list of dicts

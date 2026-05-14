@@ -48,6 +48,7 @@ def get_dataloader(
     encoded_path: str = None,
     encoded_data: list = None,
     num_workers: int = 0,
+    prefetch_factor: int = 4,
 ) -> DataLoader:
     """
     Build and return a DataLoader for the dialogue dataset.
@@ -58,6 +59,7 @@ def get_dataloader(
         encoded_path:  Path to encoded.json (used if encoded_data is None).
         encoded_data:  In-memory encoded pairs list (takes priority).
         num_workers:   Worker processes for data loading (0 = main thread).
+        prefetch_factor: Batches prefetched per worker (only if num_workers > 0).
     """
     dataset = DialogueDataset(encoded_path=encoded_path, encoded_data=encoded_data)
     pin = torch.cuda.is_available()
@@ -70,5 +72,5 @@ def get_dataloader(
     )
     if num_workers > 0:
         kw["persistent_workers"] = True
-        kw["prefetch_factor"] = 2
+        kw["prefetch_factor"] = max(2, min(32, int(prefetch_factor)))
     return DataLoader(**kw)
