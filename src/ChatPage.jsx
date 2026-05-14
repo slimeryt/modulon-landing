@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { Link, useNavigate } from 'react-router-dom';
 import {
   BarChart3,
+  ChevronDown,
   ClipboardCopy,
   Copy,
   File,
@@ -30,6 +31,11 @@ const API = (() => {
   const origin = (import.meta.env.VITE_PUBLIC_API_ORIGIN || '').trim().replace(/\/$/, '');
   return origin ? `${origin}/api` : '/api';
 })();
+
+/** Sole model served by the API today (shown in the composer). */
+const MODULON_CHAT_MODEL_LABEL = 'Modulon M0.1';
+/** Placeholder copy in the model menu until additional models ship. */
+const MODULON_MODEL_MENU_SOON = 'More soon…';
 
 const DAILY_USAGE_KEY = 'modulon-daily-usage';
 const WEEKLY_USAGE_KEY = 'modulon-weekly-usage';
@@ -330,8 +336,12 @@ export default function ChatPage() {
   const attachPlusRef = useRef(null);
   const attachControlsRef = useRef(null);
   const attachMenuRef = useRef(null);
+  const modelPickerBtnRef = useRef(null);
+  const modelSelectMenuRef = useRef(null);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [attachMenuPos, setAttachMenuPos] = useState(null);
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [modelMenuPos, setModelMenuPos] = useState(null);
   const [contextMenu, setContextMenu] = useState(null);
   const [dailyUsage, setDailyUsage] = useState(() => readDailyUsage());
   const [weeklyUsage, setWeeklyUsage] = useState(() => readWeeklyUsage());
@@ -387,7 +397,17 @@ export default function ChatPage() {
     (async () => {
       try {
         const r = await fetch(`${API}/health`);
-        if (!c) setApiOk(r.ok);
+        if (!r.ok) {
+          if (!c) setApiOk(false);
+          return;
+        }
+        const ct = (r.headers.get('content-type') || '').toLowerCase();
+        if (!ct.includes('application/json')) {
+          if (!c) setApiOk(false);
+          return;
+        }
+        const data = await r.json();
+        if (!c) setApiOk(data && data.ok === true);
       } catch {
         if (!c) setApiOk(false);
       }
@@ -518,19 +538,39 @@ export default function ChatPage() {
       setAttachMenuPos(null);
       return;
     }
-    const update = () => {
+    const gap = 8;
+    const margin = 8;
+    const menuWidth = 208;
+    const fallbackMenuHeight = 112;
+
+    const placeMenu = () => {
       const btn = attachPlusRef.current;
       if (!btn) return;
       const r = btn.getBoundingClientRect();
-      const menuWidth = 208;
+      const menu = attachMenuRef.current;
+      const h = menu?.getBoundingClientRect().height ?? fallbackMenuHeight;
+      const vh = window.innerHeight;
+
       let left = r.left;
-      if (left + menuWidth > window.innerWidth - 8) left = window.innerWidth - menuWidth - 8;
-      left = Math.max(8, left);
-      setAttachMenuPos({ top: r.bottom + 6, left });
+      if (left + menuWidth > window.innerWidth - margin) left = window.innerWidth - menuWidth - margin;
+      left = Math.max(margin, left);
+
+      let top = r.bottom + gap;
+      if (top + h > vh - margin) {
+        top = r.top - h - gap;
+      }
+      top = Math.max(margin, Math.min(top, vh - h - margin));
+
+      setAttachMenuPos({ top, left });
     };
-    update();
-    window.addEventListener('resize', update);
-    return () => window.removeEventListener('resize', update);
+
+    placeMenu();
+    const raf = requestAnimationFrame(() => placeMenu());
+    window.addEventListener('resize', placeMenu);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', placeMenu);
+    };
   }, [attachMenuOpen]);
 
   useEffect(() => {
@@ -552,6 +592,47 @@ export default function ChatPage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [attachMenuOpen]);
+
+  useLayoutEffect(() => {
+    if (!modelMenuOpen) {
+      setModelMenuPos(null);
+      return;
+    }
+    const update = () => {
+      const btn = modelPickerBtnRef.current;
+      if (!btn) return;
+      const r = btn.getBoundingClientRect();
+      const menuWidth = 208;
+      let left = r.right - menuWidth;
+      if (left < 8) left = 8;
+      if (left + menuWidth > window.innerWidth - 8) left = window.innerWidth - menuWidth - 8;
+      const gap = 8;
+      setModelMenuPos({ left, bottom: window.innerHeight - r.top + gap });
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, [modelMenuOpen]);
+
+  useEffect(() => {
+    if (!modelMenuOpen) return;
+    const onPointerDown = (e) => {
+      if (modelPickerBtnRef.current?.contains(e.target)) return;
+      if (modelSelectMenuRef.current?.contains(e.target)) return;
+      setModelMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+  }, [modelMenuOpen]);
+
+  useEffect(() => {
+    if (!modelMenuOpen) return;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setModelMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [modelMenuOpen]);
 
   const copySelectionFromMenu = useCallback(async () => {
     const t = typeof window !== 'undefined' ? window.getSelection()?.toString().trim() : '';
@@ -668,6 +749,9 @@ export default function ChatPage() {
   const selectConversation = (id) => {
     setErr('');
     setConversationId(id);
+    if (typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches) {
+      setSidebarOpen(false);
+    }
   };
 
   const deleteConversation = async (id, e) => {
@@ -732,7 +816,7 @@ export default function ChatPage() {
       <div className="fixed inset-0 pointer-events-none opacity-20 dark:opacity-[0.35] bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(120,119,198,0.2),transparent)]" />
 
       <div
-        className="fixed z-40 flex items-center gap-0.5 rounded-full border border-zinc-200/90 bg-white/90 py-1 pl-1 pr-1 shadow-sm backdrop-blur-md dark:border-white/[0.1] dark:bg-[#0c0c0e]/90 dark:shadow-[0_8px_30px_-8px_rgba(0,0,0,0.65)] max-md:backdrop-blur-xl"
+        className="fixed z-40 flex items-center gap-0.5 rounded-full border border-zinc-200/90 bg-white/90 py-1 pl-1 pr-1 shadow-sm backdrop-blur-md dark:border-white/[0.12] dark:bg-white/[0.08] dark:shadow-[0_8px_30px_-8px_rgba(0,0,0,0.65)] max-md:backdrop-blur-xl"
         style={{
           top: 'max(0.75rem, env(safe-area-inset-top, 0px))',
           right: 'max(0.75rem, env(safe-area-inset-right, 0px))',
@@ -793,7 +877,7 @@ export default function ChatPage() {
         }}
       >
         <aside
-          className={`flex min-h-0 flex-1 flex-col overflow-hidden border border-zinc-200/90 bg-white/95 text-zinc-900 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:border-white/[0.1] dark:bg-[#0c0c0e]/95 dark:text-white dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.85)] ${
+          className={`flex min-h-0 flex-1 flex-col overflow-hidden border border-zinc-200/90 bg-white/90 text-zinc-900 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:border-white/[0.12] dark:bg-white/[0.06] dark:text-white dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] ${
             sidebarOpen ? 'rounded-2xl' : 'rounded-full'
           }`}
         >
@@ -870,7 +954,7 @@ export default function ChatPage() {
         </aside>
         {user ? (
           <div
-            className={`shrink-0 flex items-center rounded-full border border-zinc-200/90 bg-white/95 shadow-[0_8px_30px_-8px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:border-white/[0.1] dark:bg-[#0c0c0e]/95 dark:shadow-[0_8px_30px_-8px_rgba(0,0,0,0.75)] transition-colors hover:bg-zinc-50/90 dark:hover:bg-white/[0.04] ${
+            className={`shrink-0 flex items-center rounded-full border border-zinc-200/90 bg-white/90 shadow-[0_8px_30px_-8px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:border-white/[0.12] dark:bg-white/[0.06] dark:shadow-[0_8px_30px_-8px_rgba(0,0,0,0.45)] transition-colors hover:bg-zinc-50/90 dark:hover:bg-white/[0.04] ${
               sidebarOpen ? 'gap-2 px-2.5 py-2.5' : 'gap-2 px-2.5 py-2.5 md:justify-center md:gap-0 md:px-2 md:py-2'
             }`}
           >
@@ -912,7 +996,7 @@ export default function ChatPage() {
           </div>
         ) : (
           <div
-            className={`shrink-0 border border-zinc-200/90 bg-white/95 shadow-[0_8px_30px_-8px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:border-white/[0.1] dark:bg-[#0c0c0e]/95 dark:shadow-[0_8px_30px_-8px_rgba(0,0,0,0.75)] ${
+            className={`shrink-0 border border-zinc-200/90 bg-white/90 shadow-[0_8px_30px_-8px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:border-white/[0.12] dark:bg-white/[0.06] dark:shadow-[0_8px_30px_-8px_rgba(0,0,0,0.45)] ${
               sidebarOpen ? 'space-y-2 rounded-2xl p-3' : 'rounded-full p-2 max-md:space-y-2 max-md:rounded-2xl max-md:p-3 md:flex md:flex-col md:items-center md:justify-center md:gap-0 md:space-y-0'
             }`}
           >
@@ -944,24 +1028,32 @@ export default function ChatPage() {
         )}
       </div>
 
-      {/* Mobile overlay */}
-      {sidebarOpen ? (
-        <button
-          type="button"
-          className="fixed inset-0 z-20 bg-black/30 dark:bg-black/50 md:hidden"
-          aria-label="Close sidebar"
-          onClick={() => setSidebarOpen(false)}
-        />
-      ) : null}
-
       <main
-        className={`relative z-10 h-screen min-h-0 w-full overflow-hidden px-4 transition-[margin] duration-200 sm:px-6 md:py-6 ${
+        className={`relative z-10 h-screen min-h-0 w-full overflow-hidden px-4 transition-[margin,transform] duration-200 ease-out sm:px-6 md:py-6 ${
           sidebarOpen ? 'md:ml-[calc(18rem+2.5rem)]' : 'md:ml-[calc(3.5rem+2.5rem)]'
+        } ${
+          sidebarOpen
+            ? 'max-md:translate-x-[calc(min(18rem,calc(100vw-2rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)))-2.75rem)]'
+            : 'max-md:translate-x-0'
         } max-md:pb-[max(1rem,env(safe-area-inset-bottom,0px))] max-md:pt-[max(1rem,calc(env(safe-area-inset-top,0px)+3.75rem))]`}
       >
         <div className="max-w-2xl mx-auto flex flex-col h-full">
         {loadingMessages && conversationId ? (
           <p className="text-xs text-zinc-500 dark:text-white/35 mb-2">Loading messages…</p>
+        ) : null}
+        {apiOk === false ? (
+          <div className="mb-4 rounded-xl border border-amber-500/35 bg-amber-500/[0.12] px-3 py-2.5 text-xs leading-relaxed text-amber-950 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-50/95">
+            <p className="font-semibold text-amber-950 dark:text-amber-100">Chat API is not available here.</p>
+            <p className="mt-1 text-amber-900/90 dark:text-amber-100/85">
+              Static hosts (for example Cloudflare Pages) do not run the Node chat server. Deploy{' '}
+              <code className="rounded bg-black/10 px-1 font-mono text-[10px] dark:bg-black/30">server/chat-api.mjs</code>{' '}
+              on a host with Node, set{' '}
+              <code className="rounded bg-black/10 px-1 font-mono text-[10px] dark:bg-black/30">VITE_PUBLIC_API_ORIGIN</code>{' '}
+              to that API&apos;s origin in your Pages build environment, then redeploy. Locally,{' '}
+              <code className="rounded bg-black/10 px-1 font-mono text-[10px] dark:bg-black/30">npm run dev:all</code>{' '}
+              proxies <code className="rounded bg-black/10 px-1 font-mono text-[10px] dark:bg-black/30">/api</code>.
+            </p>
+          </div>
         ) : null}
         {!conversationId && apiOk === true && !loadingList ? (
           <p className="text-sm text-zinc-600 dark:text-white/45 mb-4">
@@ -1041,7 +1133,10 @@ export default function ChatPage() {
               <button
                 ref={attachPlusRef}
                 type="button"
-                onClick={() => setAttachMenuOpen((o) => !o)}
+                onClick={() => {
+                  setModelMenuOpen(false);
+                  setAttachMenuOpen((o) => !o);
+                }}
                 disabled={sending || apiOk === false || !conversationId}
                 aria-expanded={attachMenuOpen}
                 aria-haspopup="menu"
@@ -1096,6 +1191,40 @@ export default function ChatPage() {
               aria-label="Message"
             />
             <button
+              ref={modelPickerBtnRef}
+              type="button"
+              onClick={() => {
+                setAttachMenuOpen(false);
+                setModelMenuOpen((o) => !o);
+              }}
+              disabled={sending || apiOk === false || !conversationId}
+              aria-expanded={modelMenuOpen}
+              aria-haspopup="menu"
+              aria-label={`Model: ${MODULON_CHAT_MODEL_LABEL}. ${MODULON_MODEL_MENU_SOON}`}
+              className="inline-flex h-11 min-w-0 max-w-[min(52vw,11rem)] shrink-0 items-center gap-0.5 rounded-full border border-transparent px-2 text-[11px] font-medium leading-tight text-zinc-600 transition-colors hover:border-zinc-200/80 hover:bg-zinc-100/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 disabled:pointer-events-none disabled:opacity-35 dark:text-white/65 dark:hover:border-white/15 dark:hover:bg-white/[0.06] dark:focus-visible:ring-white/25 sm:max-w-[13.5rem] sm:text-xs"
+            >
+              <span className="min-w-0 truncate">{MODULON_CHAT_MODEL_LABEL}</span>
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden strokeWidth={2} />
+            </button>
+            {modelMenuOpen && modelMenuPos ? (
+              <div
+                ref={modelSelectMenuRef}
+                role="menu"
+                aria-label="Models"
+                className="fixed z-[80] w-52 overflow-hidden rounded-xl border border-zinc-200/90 bg-white py-1 text-sm shadow-xl dark:border-white/[0.12] dark:bg-[#121214]"
+                style={{ left: modelMenuPos.left, bottom: modelMenuPos.bottom }}
+              >
+                <div
+                  role="menuitem"
+                  tabIndex={-1}
+                  aria-disabled="true"
+                  className="px-3 py-2.5 text-center text-xs font-medium italic text-zinc-500 dark:text-white/40"
+                >
+                  {MODULON_MODEL_MENU_SOON}
+                </div>
+              </div>
+            ) : null}
+            <button
               type="submit"
               disabled={sending || !input.trim() || apiOk === false || !conversationId}
               className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-transparent text-zinc-600 transition-colors hover:bg-zinc-200/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 disabled:pointer-events-none disabled:opacity-35 dark:text-white/75 dark:hover:bg-white/[0.1] dark:focus-visible:ring-white/25"
@@ -1117,12 +1246,12 @@ export default function ChatPage() {
         >
           <button
             type="button"
-            className="absolute inset-0 bg-black/40 backdrop-blur-[2px] dark:bg-black/60 sm:bg-black/50 sm:backdrop-blur-sm dark:sm:bg-black/70"
+            className="absolute inset-0 bg-black/40 backdrop-blur-[2px] dark:bg-black/35 sm:bg-black/50 sm:backdrop-blur-sm dark:sm:bg-black/45"
             aria-label="Close settings"
             onClick={() => setSettingsOpen(false)}
           />
-          <div className="relative z-10 flex h-[100dvh] w-full max-w-none flex-col overflow-hidden border-0 bg-white shadow-none dark:bg-[#0e0e10] sm:h-[min(84vh,640px)] sm:min-h-[min(380px,68vh)] sm:max-w-[min(92vw,56rem)] sm:rounded-2xl sm:border sm:border-zinc-200/90 sm:shadow-[0_24px_80px_rgba(0,0,0,0.12)] dark:sm:border-white/[0.12] dark:sm:shadow-[0_24px_80px_rgba(0,0,0,0.9)]">
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-200/80 px-4 py-3.5 dark:border-white/[0.08] max-sm:pt-[max(0.875rem,env(safe-area-inset-top,0px))] sm:px-5 sm:py-4">
+          <div className="relative z-10 flex h-[100dvh] w-full max-w-none flex-col overflow-hidden border-0 bg-white/85 shadow-none backdrop-blur-2xl dark:bg-white/[0.07] dark:backdrop-blur-2xl sm:h-[min(84vh,640px)] sm:min-h-[min(380px,68vh)] sm:max-w-[min(92vw,56rem)] sm:rounded-2xl sm:border sm:border-zinc-200/60 sm:bg-white/90 sm:shadow-[0_24px_80px_rgba(0,0,0,0.12)] dark:sm:border-white/[0.1] dark:sm:bg-white/[0.08] dark:sm:shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-200/40 bg-transparent px-4 py-3.5 dark:border-white/[0.06] max-sm:pt-[max(0.875rem,env(safe-area-inset-top,0px))] sm:px-5 sm:py-4">
               <h2 id="chat-settings-title" className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-white sm:text-xl">
                 Settings
               </h2>
@@ -1136,9 +1265,9 @@ export default function ChatPage() {
               </button>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col bg-white dark:bg-[#0e0e10] sm:flex-row">
+            <div className="flex min-h-0 flex-1 flex-col bg-transparent sm:flex-row">
               <nav
-                className="flex shrink-0 flex-row gap-1 overflow-x-auto border-b border-zinc-200/25 bg-transparent p-2 no-scrollbar dark:border-white/[0.06] sm:w-52 sm:flex-col sm:overflow-y-auto sm:border-b-0 sm:border-r sm:border-zinc-200/20 sm:bg-transparent dark:sm:border-white/[0.05]"
+                className="flex shrink-0 flex-row gap-1 overflow-x-auto border-b border-zinc-200/20 bg-transparent p-2 no-scrollbar dark:border-white/[0.04] sm:w-52 sm:flex-col sm:overflow-y-auto sm:border-b-0 sm:border-r sm:border-zinc-200/15 sm:bg-transparent dark:sm:border-white/[0.04]"
                 aria-label="Settings sections"
               >
                 {[
@@ -1188,7 +1317,7 @@ export default function ChatPage() {
                       <p className="mb-3 text-[10px] font-medium uppercase tracking-widest text-zinc-500 dark:text-white/35">
                         Signed in as
                       </p>
-                      <div className="flex items-center gap-4 rounded-xl border border-zinc-200/90 bg-zinc-50/80 p-4 dark:border-white/[0.08] dark:bg-black/30">
+                      <div className="flex items-center gap-4 rounded-xl border border-zinc-200/90 bg-zinc-50/80 p-4 dark:border-white/[0.1] dark:bg-white/[0.05]">
                         {user.photoURL ? (
                           <img
                             src={user.photoURL}

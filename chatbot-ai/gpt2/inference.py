@@ -4,20 +4,19 @@ GPT-2 Medium inference for Modulon.
 Loads the fine-tuned model from models/gpt2/ and generates responses.
 """
 
+import os
+
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 MODEL_DIR = "models/gpt2-de"
 
-# Generation settings — tweak these to adjust personality
+# Generation settings — Modulon M0.1 (single deployed model)
 MAX_NEW_TOKENS     = 60
 TEMPERATURE        = 0.6     # lower = more focused and on-topic
 TOP_K              = 40
 TOP_P              = 0.90
 REPETITION_PENALTY = 1.4     # stronger penalty against repeating itself
-
-
-import os
 
 
 class GPT2Chatbot:
@@ -43,7 +42,7 @@ class GPT2Chatbot:
         print(f"Ready on {self.device}.\n")
 
     def respond(self, user_input: str) -> str:
-        """Generate a response to user_input."""
+        """Generate a response to user_input (Modulon M0.1)."""
         prompt     = f"Nutzer: {user_input.strip()}\nBot:"
         input_ids  = self.tokenizer.encode(prompt, return_tensors="pt").to(self.device)
 

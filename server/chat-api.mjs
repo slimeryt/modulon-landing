@@ -194,7 +194,7 @@ function askPython(message) {
       reject(new Error('Inference timed out (30s)'));
     }, 30_000);
     pendingQueue.push({ resolve, reject, timer });
-    pythonProc.stdin.write(JSON.stringify({ message }) + '\n');
+    pythonProc.stdin.write(`${JSON.stringify({ message })}\n`);
   });
 }
 
