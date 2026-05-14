@@ -42,8 +42,9 @@ The repo includes a **`Dockerfile`** that:
 2. Runs **`npm run build`** (Vite → `dist/`) then **`npm prune --omit=dev`**.
 3. Starts **`node server/chat-api.mjs`**, which serves **`/api/*`** and the **React SPA** from **`dist/`** on the same **`PORT`**.
 
-**Railway:** New Project → Deploy from GitHub → ensure the **Dockerfile** builder is used. Set **`VITE_*`** Firebase (and any `VITE_` API URLs) in the service **Variables** so they exist at **build** time.
+**Railway:** New Project → Deploy from GitHub → ensure the **Dockerfile** builder is used.
 
+- **Firebase (`VITE_FIREBASE_*`):** add the same variables in Railway **Variables** (service env). The server injects them into `index.html` at **runtime**, so auth works even though `npm run build` in Docker does not see those keys. You still need **Firebase Console → Authentication → Settings → Authorized domains**: add your production host (e.g. `modulon.xyz`) and `*.railway.app` if you use the default URL.
 - **`API_HOST=0.0.0.0`** is set in the image; **`PORT`** comes from Railway.
 - **Python**: locally on Linux use `python3` or **`PYTHON`**. In the image, **`PYTHON=python3`** is set.
 - **SQLite**: set **`CHAT_DB_PATH`** (e.g. `/app/data/chat.sqlite`) and mount a volume on **`/app/data`** for persistence.

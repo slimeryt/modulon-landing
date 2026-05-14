@@ -51,6 +51,43 @@ const DIST_DIR   = path.join(ROOT, 'dist');
 const INDEX_HTML = path.join(DIST_DIR, 'index.html');
 const SERVE_SPA  = fs.existsSync(INDEX_HTML);
 
+/**
+ * Web Firebase keys — Vite only inlines these at `vite build` if present in the build env.
+ * Railway/Docker often injects secrets at **runtime** only, so we embed them into `index.html`
+ * when serving the SPA (see SPA_INDEX_HTML below).
+ */
+function firebaseWebConfigFromEnv() {
+  return {
+    apiKey: process.env.VITE_FIREBASE_API_KEY || '',
+    authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+    projectId: process.env.VITE_FIREBASE_PROJECT_ID || '',
+    storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+    messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+    appId: process.env.VITE_FIREBASE_APP_ID || '',
+  };
+}
+
+function firebaseWebConfigComplete(c) {
+  return !!(c.apiKey && c.authDomain && c.projectId && c.appId);
+}
+
+/** @type {string | null} */
+let SPA_INDEX_HTML = null;
+if (SERVE_SPA) {
+  const raw = fs.readFileSync(INDEX_HTML, 'utf8');
+  const fb = firebaseWebConfigFromEnv();
+  const payload = firebaseWebConfigComplete(fb) ? fb : null;
+  const inject = `<script>window.__MODULON_FIREBASE__=${JSON.stringify(payload)};</script>`;
+  SPA_INDEX_HTML = raw.includes('<head>')
+    ? raw.replace('<head>', `<head>\n    ${inject}\n`)
+    : `${inject}${raw}`;
+  if (firebaseWebConfigComplete(fb)) {
+    console.log('[spa] Firebase web config injected into HTML from process.env (runtime).');
+  } else {
+    console.log('[spa] No VITE_FIREBASE_* in env — Firebase disabled until you set them on the host.');
+  }
+}
+
 // ── Express ───────────────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json());
@@ -227,9 +264,8 @@ if (SERVE_SPA) {
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
     if (req.method !== 'GET') return next();
-    res.sendFile(INDEX_HTML, (err) => {
-      if (err) next(err);
-    });
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(SPA_INDEX_HTML);
   });
 }
 
