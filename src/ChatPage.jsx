@@ -819,7 +819,7 @@ export default function ChatPage() {
 
       {/* Mobile: full-width header so controls stay out of the message column. */}
       <header
-        className="flex md:hidden fixed inset-x-0 top-0 z-40 items-center justify-between gap-3 border-b border-zinc-200/75 bg-zinc-100/95 px-3 shadow-sm backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#070708]/95 dark:shadow-[0_1px_0_rgba(255,255,255,0.04)]"
+        className="flex md:hidden fixed inset-x-0 top-0 z-[60] items-center justify-between gap-3 border-b border-zinc-200/75 bg-zinc-100/95 px-3 shadow-sm backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#070708]/95 dark:shadow-[0_1px_0_rgba(255,255,255,0.04)]"
         style={{
           paddingTop: 'max(0.5rem, env(safe-area-inset-top, 0px))',
           paddingBottom: '0.5rem',
@@ -917,7 +917,7 @@ export default function ChatPage() {
 
       {/* Sidebar column: md+ narrows width when closed; same full height as open. Mobile still slides off. */}
       <div
-        className={`fixed z-30 max-md:z-50 flex flex-col overflow-hidden transition-[width,transform] duration-200 ease-out ${
+        className={`fixed z-30 max-md:z-50 flex flex-col overflow-hidden transition-[width,transform] duration-200 ease-out top-[max(1rem,calc(env(safe-area-inset-top,0px)+3.25rem))] md:top-[max(1rem,env(safe-area-inset-top,0px))] ${
           sidebarOpen ? 'gap-2' : 'gap-2 md:gap-1.5'
         } ${
           sidebarOpen
@@ -926,7 +926,6 @@ export default function ChatPage() {
         }`}
         style={{
           left: 'max(1rem, env(safe-area-inset-left, 0px))',
-          top: 'max(1rem, env(safe-area-inset-top, 0px))',
           bottom: 'max(1rem, env(safe-area-inset-bottom, 0px))',
         }}
       >
