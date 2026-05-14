@@ -1,0 +1,4 @@
+# Cloudflare Pages / Netlify-style SPA fallback (copied to dist/ by Vite).
+# When the frontend is on Pages and the API is elsewhere, set VITE_PUBLIC_API_ORIGIN
+# at build time so the app calls that host for /api (see README).
+/*    /index.html   200

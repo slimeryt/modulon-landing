@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   ArrowRight,
   Github,
+  LogIn,
   LogOut,
   MessageCircle,
   Twitter,
@@ -401,20 +402,13 @@ function Navbar() {
                   </div>
                 </>
               ) : (
-                <>
-                  <Link
-                    to="/login"
-                    className="text-zinc-600 dark:text-white/60 text-sm font-medium px-4 py-2 rounded-md border border-zinc-300/90 hover:border-zinc-400 hover:text-zinc-900 dark:border-white/15 dark:hover:border-white/35 dark:hover:text-white transition-all duration-200 cursor-pointer"
-                  >
-                    Log in
-                  </Link>
-                  <Link
-                    to="/signup"
-                    className="bg-white text-black text-sm font-semibold px-4 py-2 rounded-md hover:bg-white/90 transition-colors duration-200 cursor-pointer flex items-center gap-1.5"
-                  >
-                    Get Started <ChevronRight className="w-3.5 h-3.5" />
-                  </Link>
-                </>
+                <Link
+                  to="/login"
+                  aria-label="Log in"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-300/90 bg-white/85 text-zinc-700 shadow-sm backdrop-blur-sm transition-all duration-200 hover:border-zinc-400 hover:bg-white hover:text-zinc-900 dark:border-white/[0.12] dark:bg-[#0c0c0e]/85 dark:text-white/85 dark:hover:border-white/30 dark:hover:bg-white/[0.08] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/45 focus-visible:ring-offset-0 dark:focus-visible:ring-white/25"
+                >
+                  <LogIn className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+                </Link>
               )}
             </div>
           </div>

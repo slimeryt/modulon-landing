@@ -26,7 +26,10 @@ import {
 import { useAuth, mapAuthError } from './AuthContext';
 import { useTheme } from './ThemeContext';
 
-const API = '/api';
+const API = (() => {
+  const origin = (import.meta.env.VITE_PUBLIC_API_ORIGIN || '').trim().replace(/\/$/, '');
+  return origin ? `${origin}/api` : '/api';
+})();
 
 const DAILY_USAGE_KEY = 'modulon-daily-usage';
 const WEEKLY_USAGE_KEY = 'modulon-weekly-usage';
