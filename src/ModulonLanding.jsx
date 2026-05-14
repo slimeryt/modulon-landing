@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
-  Cpu,
   Github,
   LogOut,
   MessageCircle,
@@ -10,6 +9,18 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
+import modulonIcon from './assets/icons/Modulon_Icon.png';
+
+function BrandMark({ className = 'h-5 w-5' }) {
+  return (
+    <img
+      src={modulonIcon}
+      alt=""
+      decoding="async"
+      className={`object-contain shrink-0 ${className}`}
+    />
+  );
+}
 
 // ─── Brand diagonal-l glyph (Anthropic-i style) ──────────────────────────────
 function BrandL({ style = {} }) {
@@ -338,7 +349,7 @@ function Navbar() {
       >
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Cpu className="w-5 h-5 text-zinc-800 dark:text-white" strokeWidth={1.5} />
+            <BrandMark className="h-5 w-5 opacity-90 dark:opacity-95" />
             <span className="text-zinc-900 dark:text-white font-semibold tracking-tight text-lg">Modulon</span>
             <span className="text-zinc-600 dark:text-white/30 text-xs font-mono ml-1">v0.1.0</span>
           </div>
@@ -424,7 +435,7 @@ function Navbar() {
           transition: 'opacity 400ms ease, transform 400ms cubic-bezier(0.16,1,0.3,1)',
         }}
       >
-        <Cpu className="w-4 h-4 text-zinc-600 dark:text-white/60 group-hover:text-zinc-900 dark:group-hover:text-white transition-colors" strokeWidth={1.5} />
+        <BrandMark className="h-4 w-4 opacity-70 group-hover:opacity-100 transition-opacity" />
         <span className="text-zinc-600 dark:text-white/60 group-hover:text-zinc-900 dark:group-hover:text-white text-sm font-semibold tracking-tight transition-colors">
           Modulon
         </span>
@@ -674,7 +685,7 @@ function Footer() {
     <footer className="relative z-10 border-t border-zinc-200 bg-zinc-100 px-6 py-10 dark:border-white/8 dark:bg-[#0a0a0a]">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-          <Cpu className="w-4 h-4 text-zinc-600 dark:text-white/30" strokeWidth={1.5} />
+          <BrandMark className="h-4 w-4 opacity-50" />
           <span className="text-zinc-600 dark:text-white/30 text-sm">Modulon v0.1.0</span>
         </div>
 
