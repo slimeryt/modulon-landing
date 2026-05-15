@@ -335,7 +335,7 @@ export default function SignUpPage() {
       <div className="relative z-10 flex min-h-screen w-full max-w-md flex-col justify-center px-8 py-16 max-sm:pl-[4.75rem]">
         {/* Logo */}
         <Link to="/" className="mb-12 flex w-fit items-center gap-2 rounded-lg py-1 pl-1 pr-2 transition-opacity hover:opacity-90">
-          <BrandMark className="h-5 w-5 opacity-90 dark:opacity-95" />
+          <BrandMark className="h-5 w-5 ml-3 object-right opacity-90 dark:opacity-95" />
           <span className="font-semibold tracking-tight text-zinc-900 dark:text-white">Modulon</span>
           <span className="font-mono text-xs text-zinc-500 dark:text-white/30">v0.1.0</span>
         </Link>

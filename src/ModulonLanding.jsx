@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
 import modulonIcon from './assets/icons/Modulon_Icon.png';
+import modulonText from './assets/icons/Modulon_Text.png';
 
 function BrandMark({ className = 'h-5 w-5' }) {
   return (
@@ -347,8 +348,13 @@ function Navbar() {
     >
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 rounded-lg -ml-1 pl-1 pr-2 py-1 hover:opacity-90 transition-opacity">
-            <BrandMark className="h-5 w-5 opacity-90 dark:opacity-95" />
-            <span className="text-zinc-900 dark:text-white font-semibold tracking-tight text-lg">Modulon</span>
+            <BrandMark className="h-5 w-5 ml-3 object-right opacity-90 dark:opacity-95" />
+            <img
+              src={modulonText}
+              alt="Modulon"
+              decoding="async"
+              className="h-7 w-auto max-w-[8.5rem] object-contain object-left sm:h-8 sm:max-w-[9.5rem] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.4)]"
+            />
             <span className="text-zinc-600 dark:text-white/30 text-xs font-mono ml-1">v0.1.0</span>
           </Link>
           <div className="hidden md:flex items-center gap-8">
@@ -438,10 +444,13 @@ function Hero() {
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 pt-24 pb-16 w-full flex items-center">
         <div className="relative z-20 flex-1 max-w-xl max-md:rounded-2xl max-md:border max-md:border-zinc-200/50 max-md:bg-zinc-100/88 max-md:px-4 max-md:py-6 max-md:shadow-[0_12px_40px_-20px_rgba(0,0,0,0.12)] max-md:backdrop-blur-md dark:max-md:border-white/[0.08] dark:max-md:bg-[#080808]/82 dark:max-md:shadow-[0_16px_48px_-24px_rgba(0,0,0,0.85)] md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-blur-none md:rounded-none">
-          <h1 className="text-5xl max-[380px]:text-[2.65rem] sm:text-6xl md:text-7xl font-bold tracking-tight leading-none mb-6 font-sans">
-            <span className="text-zinc-950 dark:text-white max-md:drop-shadow-[0_1px_2px_rgba(0,0,0,0.08)] md:bg-gradient-to-br md:from-zinc-900 md:via-zinc-800 md:to-zinc-500 md:bg-clip-text md:text-transparent md:drop-shadow-none dark:md:from-white dark:md:via-white dark:md:to-white/45">
-              Modulon.
-            </span>
+          <h1 className="mb-6 -ml-7 leading-none sm:-ml-8 md:-ml-12 lg:-ml-18 xl:-ml-[6.5rem]">
+            <img
+              src={modulonText}
+              alt="Modulon"
+              decoding="async"
+              className="block h-14 w-auto max-w-[min(100%,22rem)] object-contain object-left max-[380px]:h-12 sm:h-[4.75rem] md:h-28 md:max-w-[min(100%,32rem)] lg:h-32 lg:max-w-[min(100%,36rem)] xl:h-[8.5rem] dark:drop-shadow-[0_1px_3px_rgba(0,0,0,0.65)]"
+            />
           </h1>
 
           <RotatingTypingText phrases={HERO_TYPING_PHRASES} />
@@ -667,6 +676,18 @@ function Footer() {
             className="text-zinc-500 transition-colors hover:text-zinc-800 dark:text-white/35 dark:hover:text-white/70"
           >
             Chat (prototype)
+          </Link>
+          <Link
+            to="/status"
+            className="text-zinc-500 transition-colors hover:text-zinc-800 dark:text-white/35 dark:hover:text-white/70"
+          >
+            Status
+          </Link>
+          <Link
+            to="/changelog"
+            className="text-zinc-500 transition-colors hover:text-zinc-800 dark:text-white/35 dark:hover:text-white/70"
+          >
+            Changelog
           </Link>
         </div>
 

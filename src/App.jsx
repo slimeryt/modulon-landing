@@ -4,6 +4,8 @@ import ModulonLanding from './ModulonLanding';
 import ChatPage from './ChatPage';
 import LoginPage from './LoginPage';
 import SignUpPage from './SignUpPage';
+import StatusPage from './StatusPage';
+import ChangelogPage from './ChangelogPage';
 import { useAuth } from './AuthContext';
 
 function RequireAuth({ children }) {
@@ -40,6 +42,8 @@ export default function App() {
         />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
+        <Route path="/status" element={<StatusPage />} />
+        <Route path="/changelog" element={<ChangelogPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
