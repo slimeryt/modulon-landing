@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, ArrowRight, Home } from 'lucide-react';
 import { useAuth, mapAuthError } from './AuthContext';
+import { useLanguage } from './LanguageContext';
 import { useTheme } from './ThemeContext';
 import modulonIcon from './assets/icons/Modulon_Icon.png';
 
@@ -177,6 +178,7 @@ export default function LoginPage() {
   const { firebaseConfigured, ready, user, signInWithEmail, signInWithGoogle, sendPasswordReset } =
     useAuth();
   const { resolved } = useTheme();
+  const { t } = useLanguage();
 
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
@@ -294,10 +296,10 @@ export default function LoginPage() {
         {/* Heading */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-zinc-900 dark:text-white tracking-tight mb-2">
-            Welcome back.
+            {t('auth.welcomeBack')}
           </h1>
           <p className="text-zinc-600 dark:text-white/40 text-sm">
-            Sign in to continue to Modulon.
+            {t('auth.signInSubtitle')}
           </p>
         </div>
 

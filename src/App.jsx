@@ -6,6 +6,8 @@ import LoginPage from './LoginPage';
 import SignUpPage from './SignUpPage';
 import StatusPage from './StatusPage';
 import ChangelogPage from './ChangelogPage';
+import CookiesPage from './CookiesPage';
+import CookieConsent from './CookieConsent';
 import { useAuth } from './AuthContext';
 
 function RequireAuth({ children }) {
@@ -44,8 +46,10 @@ export default function App() {
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/status" element={<StatusPage />} />
         <Route path="/changelog" element={<ChangelogPage />} />
+        <Route path="/cookies" element={<CookiesPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <CookieConsent />
     </BrowserRouter>
   );
 }

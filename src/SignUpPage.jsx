@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, ArrowRight, Check, X, Home } from 'lucide-react';
 import { useAuth, mapAuthError } from './AuthContext';
+import { useLanguage } from './LanguageContext';
 import { useTheme } from './ThemeContext';
 import modulonIcon from './assets/icons/Modulon_Icon.png';
 
@@ -238,6 +239,7 @@ export default function SignUpPage() {
   const fromAuth = location.state?.from === 'auth'; // coming from login page
   const { firebaseConfigured, ready, user, signUpWithEmail, signInWithGoogle } = useAuth();
   const { resolved } = useTheme();
+  const { t } = useLanguage();
 
   const [name,      setName]      = useState('');
   const [nameError, setNameError] = useState('');
@@ -343,10 +345,10 @@ export default function SignUpPage() {
         {/* Heading */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-zinc-900 dark:text-white tracking-tight mb-2">
-            Create an account.
+            {t('auth.createAccount')}
           </h1>
           <p className="text-zinc-600 dark:text-white/40 text-sm">
-            Start chatting with Modulon in seconds.
+            {t('auth.signUpSubtitle')}
           </p>
         </div>
 

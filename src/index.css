@@ -6,15 +6,25 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-/* Scroll still works; bars hidden (wheel, touch, programmatic scroll). */
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Alias — scroll still works; bars stay hidden. */
 @layer utilities {
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
   }
 }

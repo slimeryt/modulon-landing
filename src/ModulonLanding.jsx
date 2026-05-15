@@ -10,6 +10,8 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useAuth } from './AuthContext';
+import { useLanguage } from './LanguageContext';
+import LanguagePicker from './LanguagePicker';
 import modulonIcon from './assets/icons/Modulon_Icon.png';
 import modulonText from './assets/icons/Modulon_Text.png';
 
@@ -316,15 +318,10 @@ function RotatingTypingText({
   );
 }
 
-const HERO_TYPING_PHRASES = [
-  'Hello World',
-  'Welcome.',
-  'From: Marlon, Robyn, Audric, Rafael',
-];
-
 function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const { firebaseConfigured, user, signOutUser } = useAuth();
+  const { t } = useLanguage();
 
   const authPillShell =
     'inline-flex shrink-0 items-stretch rounded-full border border-zinc-300/90 bg-white/80 shadow-sm backdrop-blur-sm transition-[border-color,box-shadow] duration-200 hover:border-zinc-400/90 dark:border-white/[0.12] dark:bg-[#0c0c0e]/80 dark:shadow-[0_4px_20px_-8px_rgba(0,0,0,0.5)] dark:hover:border-white/25';
@@ -357,22 +354,18 @@ function Navbar() {
             />
             <span className="text-zinc-600 dark:text-white/30 text-xs font-mono ml-1">v0.1.0</span>
           </Link>
-          <div className="hidden md:flex items-center gap-8">
-            {['About', 'Docs'].map((l) => (
-              <a key={l} href={`#${l.toLowerCase()}`} className="text-zinc-600 dark:text-white/50 text-sm hover:text-zinc-900 dark:hover:text-white transition-colors duration-200 cursor-pointer">{l}</a>
-            ))}
-          </div>
           <div className="flex items-center gap-2 sm:gap-3">
+            <LanguagePicker />
             <div className="flex items-center gap-2">
               {firebaseConfigured && user ? (
                 <>
                   <span className="hidden sm:inline text-xs text-zinc-600 dark:text-white/45 max-w-[12rem] truncate" title={user.email || ''}>
                     {user.email}
                   </span>
-                  <div className={authPillShell} role="group" aria-label="Chat and account">
+                  <div className={authPillShell} role="group" aria-label={t('nav.chatAccount')}>
                     <Link
                       to="/chat"
-                      aria-label="Chat"
+                      aria-label={t('nav.chat')}
                       className={`${authPillSeg} group rounded-l-full pl-2.5 pr-2`}
                     >
                       <span className="flex items-center overflow-hidden transition-transform duration-300 ease-out will-change-transform group-hover:-translate-x-1">
@@ -381,7 +374,7 @@ function Navbar() {
                           className="text-sm font-medium whitespace-nowrap max-w-0 overflow-hidden opacity-0 transition-[max-width,opacity,margin] duration-300 ease-out group-hover:max-w-[4rem] group-hover:opacity-100 group-hover:ml-2"
                           aria-hidden
                         >
-                          Chat
+                          {t('nav.chat')}
                         </span>
                       </span>
                     </Link>
@@ -392,7 +385,7 @@ function Navbar() {
                     <button
                       type="button"
                       onClick={() => void signOutUser()}
-                      aria-label="Sign out"
+                      aria-label={t('nav.signOut')}
                       className={`${authPillSeg} group rounded-r-full pl-2 pr-2.5`}
                     >
                       <span className="flex flex-row-reverse items-center overflow-hidden transition-transform duration-300 ease-out will-change-transform group-hover:translate-x-1">
@@ -401,7 +394,7 @@ function Navbar() {
                           className="text-sm font-medium whitespace-nowrap max-w-0 overflow-hidden opacity-0 transition-[max-width,opacity,margin] duration-300 ease-out group-hover:max-w-[6rem] group-hover:opacity-100 group-hover:mr-2"
                           aria-hidden
                         >
-                          Sign out
+                          {t('nav.signOut')}
                         </span>
                       </span>
                     </button>
@@ -410,7 +403,7 @@ function Navbar() {
               ) : (
                 <Link
                   to="/login"
-                  aria-label="Log in"
+                  aria-label={t('nav.logIn')}
                   className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-300/90 bg-white/85 text-zinc-700 shadow-sm backdrop-blur-sm transition-all duration-200 hover:border-zinc-400 hover:bg-white hover:text-zinc-900 dark:border-white/[0.12] dark:bg-[#0c0c0e]/85 dark:text-white/85 dark:hover:border-white/30 dark:hover:bg-white/[0.08] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/45 focus-visible:ring-offset-0 dark:focus-visible:ring-white/25"
                 >
                   <LogIn className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
@@ -424,6 +417,9 @@ function Navbar() {
 }
 
 function Hero() {
+  const { t } = useLanguage();
+  const heroPhrases = [t('hero.phrase1'), t('hero.phrase2'), t('hero.phrase3')];
+
   return (
     <section
       id="about"
@@ -453,12 +449,10 @@ function Hero() {
             />
           </h1>
 
-          <RotatingTypingText phrases={HERO_TYPING_PHRASES} />
+          <RotatingTypingText phrases={heroPhrases} />
 
           <p className="mb-10 max-w-md text-base leading-relaxed text-zinc-800 dark:text-white/92 sm:text-lg md:text-lg md:text-zinc-600 md:dark:text-white/50">
-            An AI chatbot trained entirely from scratch on real human conversation —
-            no pretrained weights, no black-box APIs. Just raw dialogue, a neural network,
-            and time.
+            {t('hero.description')}
           </p>
 
           <div className="flex items-center gap-4 flex-wrap">
@@ -466,14 +460,14 @@ function Hero() {
               to="/chat"
               className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black shadow-sm backdrop-blur-sm transition-all duration-200 hover:bg-white/90 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 dark:focus-visible:ring-white/30"
             >
-              Start Chatting
+              {t('hero.startChatting')}
               <ArrowRight className="h-4 w-4 shrink-0" aria-hidden />
             </Link>
             <Link
               to="/signup"
               className="inline-flex items-center gap-2 rounded-full border border-zinc-300/90 bg-white/60 px-6 py-3 text-sm font-medium text-zinc-800 shadow-sm backdrop-blur-sm transition-all duration-200 hover:border-zinc-400 hover:bg-white/90 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 dark:border-white/20 dark:bg-white/[0.06] dark:text-white/80 dark:hover:border-white/45 dark:hover:bg-white/[0.1] dark:hover:text-white dark:focus-visible:ring-white/30"
             >
-              Get started
+              {t('hero.getStarted')}
               <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
             </Link>
             <button
@@ -481,7 +475,7 @@ function Hero() {
               className="inline-flex items-center gap-2 rounded-full border border-zinc-300/90 bg-white/60 px-6 py-3 text-sm font-medium text-zinc-800 shadow-sm backdrop-blur-sm transition-all duration-200 hover:border-zinc-400 hover:bg-white/90 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 dark:border-white/20 dark:bg-white/[0.06] dark:text-white/80 dark:hover:border-white/45 dark:hover:bg-white/[0.1] dark:hover:text-white dark:focus-visible:ring-white/30"
             >
               <Github className="h-4 w-4 shrink-0" aria-hidden />
-              View Source
+              {t('hero.viewSource')}
             </button>
           </div>
         </div>
@@ -514,10 +508,10 @@ function Hero() {
       <button
         onClick={() => document.getElementById('northstar').scrollIntoView({ behavior: 'smooth' })}
         className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2 cursor-pointer group"
-        aria-label="Scroll to Project Northstar"
+        aria-label={t('hero.scrollToNorthstar')}
       >
         <span className="text-xs font-mono tracking-widest uppercase text-zinc-500 transition-colors group-hover:text-zinc-700 dark:text-white/20 dark:group-hover:text-white/40">
-          scroll
+          {t('hero.scroll')}
         </span>
         <svg
           className="h-4 w-4 text-zinc-500 transition-colors animate-bounce group-hover:text-zinc-700 dark:text-white/20 dark:group-hover:text-white/50"
@@ -566,22 +560,23 @@ function NorthStar({ size = 64 }) {
 // ─── Project Northstar section ────────────────────────────────────────────────
 function ProjectNorthstar() {
   const [ref, visible] = useReveal(0.15);
+  const { t } = useLanguage();
 
   const pillars = [
     {
       icon: '◈',
-      title: 'Transformer Core',
-      desc: 'A full attention-based architecture built from the ground up — no shortcuts.',
+      title: t('northstar.pillar1.title'),
+      desc: t('northstar.pillar1.desc'),
     },
     {
       icon: '◉',
-      title: 'Long-Term Memory',
-      desc: 'Persistent context across sessions so conversations actually build on each other.',
+      title: t('northstar.pillar2.title'),
+      desc: t('northstar.pillar2.desc'),
     },
     {
       icon: '◎',
-      title: 'Multilingual',
-      desc: 'Trained on dialogue from multiple languages, starting with English and German.',
+      title: t('northstar.pillar3.title'),
+      desc: t('northstar.pillar3.desc'),
     },
   ];
 
@@ -619,18 +614,17 @@ function ProjectNorthstar() {
         {/* Badge */}
         <span className="inline-flex items-center gap-2 rounded-full border border-zinc-300/90 px-4 py-1.5 font-mono text-xs uppercase tracking-widest text-zinc-600 dark:border-white/15 dark:text-white/40">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-400 dark:bg-white/30" />
-          In Development
+          {t('northstar.badge')}
         </span>
 
         <NorthStar size={56} />
 
         <h2 className="bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-500 bg-clip-text pb-[0.12em] text-5xl font-bold leading-none tracking-tight text-transparent md:text-7xl dark:from-white dark:via-white dark:to-white/35">
-          Project Northstar
+          {t('northstar.title')}
         </h2>
 
         <p className="text-zinc-600 dark:text-white/40 text-lg leading-relaxed max-w-lg">
-          The next generation of Modulon. A full transformer architecture, persistent memory,
-          and multilingual reasoning — trained entirely from scratch.
+          {t('northstar.description')}
         </p>
 
         <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
@@ -659,6 +653,8 @@ function ProjectNorthstar() {
 }
 
 function Footer() {
+  const { t } = useLanguage();
+
   return (
     <footer className="relative z-10 border-t border-zinc-200 bg-zinc-100 px-6 py-10 dark:border-white/8 dark:bg-[#0a0a0a]">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
@@ -668,26 +664,30 @@ function Footer() {
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-zinc-600 dark:text-white/20 text-xs font-mono">
-          <span>
-            © {new Date().getFullYear()} Modulon · Trained on Cornell Movie Dialogs · MIT License
-          </span>
+          <span>{t('footer.copyright', { year: new Date().getFullYear() })}</span>
           <Link
             to="/chat"
             className="text-zinc-500 transition-colors hover:text-zinc-800 dark:text-white/35 dark:hover:text-white/70"
           >
-            Chat (prototype)
+            {t('footer.chat')}
           </Link>
           <Link
             to="/status"
             className="text-zinc-500 transition-colors hover:text-zinc-800 dark:text-white/35 dark:hover:text-white/70"
           >
-            Status
+            {t('footer.status')}
           </Link>
           <Link
             to="/changelog"
             className="text-zinc-500 transition-colors hover:text-zinc-800 dark:text-white/35 dark:hover:text-white/70"
           >
-            Changelog
+            {t('footer.changelog')}
+          </Link>
+          <Link
+            to="/cookies"
+            className="text-zinc-500 transition-colors hover:text-zinc-800 dark:text-white/35 dark:hover:text-white/70"
+          >
+            {t('footer.cookies')}
           </Link>
         </div>
 

@@ -25,7 +25,10 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth, mapAuthError } from './AuthContext';
+import { useLanguage } from './LanguageContext';
 import { useTheme } from './ThemeContext';
+import { translatedHomeGreeting } from './i18n/homeGreeting';
+import modulonIcon from './assets/icons/Modulon_Icon.png';
 
 const API = (() => {
   const origin = (import.meta.env.VITE_PUBLIC_API_ORIGIN || '').trim().replace(/\/$/, '');
@@ -316,6 +319,7 @@ export default function ChatPage() {
   const navigate = useNavigate();
   const { firebaseConfigured, user, signOutUser, sendPasswordReset } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { t } = useLanguage();
   const [conversations, setConversations] = useState([]);
   const [conversationId, setConversationId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -382,17 +386,15 @@ export default function ChatPage() {
     }
   }, []);
 
-  const newChat = useCallback(async () => {
+  /** ChatGPT-style fresh screen — no active thread until the user sends or picks one. */
+  const goHome = useCallback(() => {
     setErr('');
-    try {
-      const d = await apiJson('/chat/conversations', { method: 'POST' });
-      setConversationId(d.id);
-      await refreshConversations();
-      await loadMessages(d.id);
-    } catch (e) {
-      setErr(e.message || String(e));
-    }
-  }, [refreshConversations, loadMessages]);
+    setConversationId(null);
+    setMessages([]);
+    setInput('');
+    setAttachMenuOpen(false);
+    setModelMenuOpen(false);
+  }, []);
 
   useEffect(() => {
     let c = false;
@@ -421,20 +423,8 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (apiOk !== true) return;
-    let cancelled = false;
-    (async () => {
-      const list = await refreshConversations();
-      if (cancelled) return;
-      if (list.length > 0) {
-        setConversationId((id) => (id == null ? list[0].id : id));
-      } else {
-        await newChat();
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [apiOk, refreshConversations, newChat]);
+    refreshConversations();
+  }, [apiOk, refreshConversations]);
 
   useEffect(() => {
     if (conversationId) loadMessages(conversationId);
@@ -736,15 +726,14 @@ export default function ChatPage() {
     });
   }, []);
 
+  // Sync active chat when the sidebar list changes. Do not clear conversationId
+  // while conversations is still [] — that races with send() creating a new chat.
   useEffect(() => {
-    if (!conversationId) return;
-    if (!conversations.length) {
-      setConversationId(null);
-      setMessages([]);
-      return;
-    }
+    if (!conversationId || conversations.length === 0) return;
     if (!conversations.some((c) => c.id === conversationId)) {
-      setConversationId(conversations[0].id);
+      const next = conversations[0]?.id ?? null;
+      setConversationId(next);
+      if (!next) setMessages([]);
     }
   }, [conversations, conversationId]);
 
@@ -772,8 +761,8 @@ export default function ChatPage() {
     }
   };
 
-  const send = async () => {
-    const text = input.trim();
+  const send = async (textOverride) => {
+    const text = (typeof textOverride === 'string' ? textOverride : input).trim();
     if (!text || sending || apiOk === false) return;
     setInput('');
     setErr('');
@@ -790,11 +779,14 @@ export default function ChatPage() {
         method: 'POST',
         body: { message: text, conversationId },
       });
-      if (data.conversationId && data.conversationId !== conversationId) {
-        setConversationId(data.conversationId);
+      const convId = data.conversationId;
+      if (convId) {
+        setConversationId(convId);
       }
-      await loadMessages(data.conversationId);
       await refreshConversations();
+      if (convId) {
+        await loadMessages(convId);
+      }
       bumpDailyMessages(1);
       bumpWeeklyMessages(1);
     } catch (e) {
@@ -812,6 +804,8 @@ export default function ChatPage() {
       setSending(false);
     }
   };
+
+  const isHome = !conversationId && apiOk !== false;
 
   return (
     <div className="h-screen overflow-hidden bg-zinc-100 text-zinc-900 dark:bg-[#070708] dark:text-white font-sans selection:bg-zinc-300/40 dark:selection:bg-white/20">
@@ -948,7 +942,7 @@ export default function ChatPage() {
           </span>
           <button
             type="button"
-            onClick={newChat}
+            onClick={goHome}
             disabled={apiOk === false}
             aria-label="New chat"
             className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white transition-colors hover:bg-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 disabled:pointer-events-none disabled:opacity-40 dark:bg-white dark:text-black dark:hover:bg-white/90 dark:focus-visible:ring-white/30"
@@ -1090,10 +1084,7 @@ export default function ChatPage() {
             : 'max-md:translate-x-0'
         } max-md:pb-[max(1rem,env(safe-area-inset-bottom,0px))] max-md:pt-[max(0.5rem,calc(env(safe-area-inset-top,0px)+3.5rem))]`}
       >
-        <div className="max-w-2xl mx-auto flex flex-col h-full">
-        {loadingMessages && conversationId ? (
-          <p className="text-xs text-zinc-500 dark:text-white/35 mb-2">Loading messages…</p>
-        ) : null}
+        <div className={`mx-auto flex h-full flex-col ${isHome ? 'max-w-3xl' : 'max-w-2xl'}`}>
         {apiOk === false ? (
           <div className="mb-4 rounded-xl border border-amber-500/35 bg-amber-500/[0.12] px-3 py-2.5 text-xs leading-relaxed text-amber-950 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-50/95">
             <p className="font-semibold text-amber-950 dark:text-amber-100">Chat API is not available here.</p>
@@ -1108,13 +1099,44 @@ export default function ChatPage() {
             </p>
           </div>
         ) : null}
-        {!conversationId && apiOk === true && !loadingList ? (
-          <p className="text-sm text-zinc-600 dark:text-white/45 mb-4">
-            Select a chat or create <strong className="text-zinc-800 dark:text-white/70">New</strong>.
-          </p>
-        ) : null}
 
-        <div className="flex-1 overflow-y-auto space-y-4 pb-4 no-scrollbar">
+        {isHome ? (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex flex-1 flex-col items-center justify-center gap-6 px-1 pb-4 pt-2 sm:gap-8 sm:pb-6">
+              <div className="flex flex-col items-center text-center">
+                <img
+                  src={modulonIcon}
+                  alt=""
+                  decoding="async"
+                  className="mb-4 h-11 w-11 object-contain opacity-90 dark:opacity-95 sm:h-12 sm:w-12"
+                />
+                <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-white sm:text-3xl">
+                  {translatedHomeGreeting(user, t)}
+                </h1>
+                <p className="mt-2 max-w-md text-sm leading-relaxed text-zinc-600 dark:text-white/45">
+                  {t('chat.homeHint')}
+                </p>
+              </div>
+              {sending ? (
+                <div className="flex w-full max-w-md justify-start">
+                  <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-zinc-200/90 bg-white px-4 py-3 text-sm text-zinc-500 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/40">
+                    <span className="inline-flex gap-1">
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 dark:bg-white/40" style={{ animationDelay: '0ms' }} />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 dark:bg-white/40" style={{ animationDelay: '150ms' }} />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 dark:bg-white/40" style={{ animationDelay: '300ms' }} />
+                    </span>
+                    {t('chat.thinking')}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <>
+            {loadingMessages && conversationId ? (
+              <p className="mb-2 text-xs text-zinc-500 dark:text-white/35">{t('chat.loadingMessages')}</p>
+            ) : null}
+            <div className="no-scrollbar flex-1 space-y-4 overflow-y-auto pb-4">
           {messages.map((msg) => (
             <div
               key={msg.id}
@@ -1146,25 +1168,35 @@ export default function ChatPage() {
                   <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-white/40 animate-bounce" style={{ animationDelay: '150ms' }} />
                   <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-white/40 animate-bounce" style={{ animationDelay: '300ms' }} />
                 </span>
-                Modulon is thinking…
+                {t('chat.thinking')}
               </div>
             </div>
           ) : null}
           <div ref={bottomRef} />
         </div>
+          </>
+        )}
 
         {err ? (
           <p className="text-xs text-red-600 dark:text-red-300/90 mb-2 font-mono whitespace-pre-wrap">{err}</p>
         ) : null}
 
         <form
-          className="border-t border-zinc-200/80 pt-2 dark:border-white/[0.06] max-md:pb-[max(0.25rem,env(safe-area-inset-bottom,0px))]"
+          className={`max-md:pb-[max(0.25rem,env(safe-area-inset-bottom,0px))] ${
+            isHome ? 'pt-2' : 'border-t border-zinc-200/80 pt-2 dark:border-white/[0.06]'
+          }`}
           onSubmit={(e) => {
             e.preventDefault();
             send();
           }}
         >
-          <div className="flex w-full items-center gap-0.5 rounded-full border border-zinc-300/90 bg-white px-3 py-1.5 shadow-sm transition-shadow focus-within:border-zinc-400/90 focus-within:ring-2 focus-within:ring-zinc-400/35 dark:border-white/10 dark:bg-black/35 dark:shadow-none dark:focus-within:border-white/20 dark:focus-within:ring-white/15">
+          <div
+            className={`flex w-full items-center gap-0.5 border bg-white transition-shadow focus-within:ring-2 dark:bg-black/35 dark:shadow-none ${
+              isHome
+                ? 'rounded-2xl border-zinc-300/90 px-3 py-2 shadow-md focus-within:border-zinc-400/90 focus-within:ring-zinc-400/35 dark:border-white/12 dark:focus-within:border-white/22 dark:focus-within:ring-white/15'
+                : 'rounded-full border-zinc-300/90 px-3 py-1.5 shadow-sm focus-within:border-zinc-400/90 focus-within:ring-zinc-400/35 dark:border-white/10 dark:focus-within:border-white/20 dark:focus-within:ring-white/15'
+            }`}
+          >
             <input
               ref={fileInputRef}
               type="file"
@@ -1190,7 +1222,7 @@ export default function ChatPage() {
                   setModelMenuOpen(false);
                   setAttachMenuOpen((o) => !o);
                 }}
-                disabled={sending || apiOk === false || !conversationId}
+                disabled={sending || apiOk === false}
                 aria-expanded={attachMenuOpen}
                 aria-haspopup="menu"
                 aria-label="Add to message"
@@ -1237,8 +1269,8 @@ export default function ChatPage() {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={conversationId ? 'Type a message…' : 'Pick or start a chat…'}
-              disabled={sending || apiOk === false || !conversationId}
+              placeholder={isHome ? t('chat.messagePlaceholder') : t('chat.typeMessage')}
+              disabled={sending || apiOk === false}
               className="min-w-0 flex-1 border-0 bg-transparent py-2.5 pl-0.5 pr-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-45 dark:text-white/90 dark:placeholder:text-white/25"
               autoComplete="off"
               aria-label="Message"
@@ -1250,7 +1282,7 @@ export default function ChatPage() {
                 setAttachMenuOpen(false);
                 setModelMenuOpen((o) => !o);
               }}
-              disabled={sending || apiOk === false || !conversationId}
+              disabled={sending || apiOk === false}
               aria-expanded={modelMenuOpen}
               aria-haspopup="menu"
               aria-label={`Model: ${MODULON_CHAT_MODEL_LABEL}. ${MODULON_MODEL_MENU_SOON}`}
@@ -1279,7 +1311,7 @@ export default function ChatPage() {
             ) : null}
             <button
               type="submit"
-              disabled={sending || !input.trim() || apiOk === false || !conversationId}
+              disabled={sending || !input.trim() || apiOk === false}
               className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-transparent text-zinc-600 transition-colors hover:bg-zinc-200/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 disabled:pointer-events-none disabled:opacity-35 dark:text-white/75 dark:hover:bg-white/[0.1] dark:focus-visible:ring-white/25"
               aria-label="Send"
             >
