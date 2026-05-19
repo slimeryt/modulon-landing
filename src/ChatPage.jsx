@@ -830,7 +830,9 @@ export default function ChatPage() {
         </button>
         <div className="flex min-w-0 flex-1 items-center justify-center px-2">
           <span className="truncate text-center text-xs font-semibold tracking-wide text-zinc-500 dark:text-white/45">
-            Modulon
+            {conversationId
+              ? (conversations.find((c) => c.id === conversationId)?.title || 'Modulon')
+              : 'Modulon'}
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -1075,13 +1077,18 @@ export default function ChatPage() {
         )}
       </div>
 
+      {/* Mobile backdrop — tap to close sidebar */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] md:hidden"
+          aria-hidden
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       <main
-        className={`relative z-10 h-screen min-h-0 w-full overflow-hidden px-4 transition-[margin,transform] duration-200 ease-out sm:px-6 md:py-6 ${
+        className={`relative z-10 h-screen min-h-0 w-full overflow-hidden px-4 transition-[margin] duration-200 ease-out sm:px-6 md:py-6 ${
           sidebarOpen ? 'md:ml-[calc(18rem+2.5rem)]' : 'md:ml-[calc(3.5rem+2.5rem)]'
-        } ${
-          sidebarOpen
-            ? 'max-md:translate-x-[calc(min(18rem,calc(100vw-2rem-env(safe-area-inset-left,0px)-env(safe-area-inset-right,0px)))-2.75rem)]'
-            : 'max-md:translate-x-0'
         } max-md:pb-[max(1rem,env(safe-area-inset-bottom,0px))] max-md:pt-[max(0.5rem,calc(env(safe-area-inset-top,0px)+3.5rem))]`}
       >
         <div className={`mx-auto flex h-full flex-col ${isHome ? 'max-w-3xl' : 'max-w-2xl'}`}>
@@ -1286,7 +1293,7 @@ export default function ChatPage() {
               aria-expanded={modelMenuOpen}
               aria-haspopup="menu"
               aria-label={`Model: ${MODULON_CHAT_MODEL_LABEL}. ${MODULON_MODEL_MENU_SOON}`}
-              className="inline-flex h-11 min-w-0 max-w-[min(52vw,11rem)] shrink-0 items-center gap-0.5 rounded-full border border-transparent px-2 text-[11px] font-medium leading-tight text-zinc-600 transition-colors hover:border-zinc-200/80 hover:bg-zinc-100/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 disabled:pointer-events-none disabled:opacity-35 dark:text-white/65 dark:hover:border-white/15 dark:hover:bg-white/[0.06] dark:focus-visible:ring-white/25 sm:max-w-[13.5rem] sm:text-xs"
+              className="inline-flex h-11 min-w-0 max-w-[7rem] shrink-0 items-center gap-0.5 rounded-full border border-transparent px-2 text-[11px] font-medium leading-tight text-zinc-600 transition-colors hover:border-zinc-200/80 hover:bg-zinc-100/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 disabled:pointer-events-none disabled:opacity-35 dark:text-white/65 dark:hover:border-white/15 dark:hover:bg-white/[0.06] dark:focus-visible:ring-white/25 sm:max-w-[min(52vw,11rem)] sm:text-xs"
             >
               <span className="min-w-0 truncate">{MODULON_CHAT_MODEL_LABEL}</span>
               <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden strokeWidth={2} />
