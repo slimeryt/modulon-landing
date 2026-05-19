@@ -35,6 +35,16 @@ chatbot-ai/models/*.pth
 chatbot-ai/data/processed/
 chatbot-ai/data/raw/
 
+# Electron build output
+dist-electron/
+
+# Android build artifacts (keep source, ignore generated build)
+android/.gradle/
+android/app/build/
+android/build/
+android/.idea/
+android/local.properties
+
 # IDE & local tooling
 .idea/
 .vscode/*
