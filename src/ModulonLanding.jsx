@@ -438,7 +438,7 @@ function Hero() {
         }}
       />
 
-      <div className="relative z-10 max-w-7xl mx-auto px-6 pt-24 pb-16 w-full flex items-center">
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-20 sm:pt-24 pb-16 w-full flex items-center">
         <div className="relative z-20 flex-1 max-w-xl max-md:rounded-2xl max-md:border max-md:border-zinc-200/50 max-md:bg-zinc-100/88 max-md:px-4 max-md:py-6 max-md:shadow-[0_12px_40px_-20px_rgba(0,0,0,0.12)] max-md:backdrop-blur-md dark:max-md:border-white/[0.08] dark:max-md:bg-[#080808]/82 dark:max-md:shadow-[0_16px_48px_-24px_rgba(0,0,0,0.85)] md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-blur-none md:rounded-none">
           <h1 className="mb-6 -ml-7 leading-none sm:-ml-8 md:-ml-12 lg:-ml-18 xl:-ml-[6.5rem]">
             <img
@@ -455,28 +455,30 @@ function Hero() {
             {t('hero.description')}
           </p>
 
-          <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
             <Link
               to="/chat"
-              className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black shadow-sm backdrop-blur-sm transition-all duration-200 hover:bg-white/90 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 dark:focus-visible:ring-white/30"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-black shadow-sm backdrop-blur-sm transition-all duration-200 hover:bg-white/90 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 sm:w-auto dark:focus-visible:ring-white/30"
             >
               {t('hero.startChatting')}
               <ArrowRight className="h-4 w-4 shrink-0" aria-hidden />
             </Link>
-            <Link
-              to="/signup"
-              className="inline-flex items-center gap-2 rounded-full border border-zinc-300/90 bg-white/60 px-6 py-3 text-sm font-medium text-zinc-800 shadow-sm backdrop-blur-sm transition-all duration-200 hover:border-zinc-400 hover:bg-white/90 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 dark:border-white/20 dark:bg-white/[0.06] dark:text-white/80 dark:hover:border-white/45 dark:hover:bg-white/[0.1] dark:hover:text-white dark:focus-visible:ring-white/30"
-            >
-              {t('hero.getStarted')}
-              <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
-            </Link>
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 rounded-full border border-zinc-300/90 bg-white/60 px-6 py-3 text-sm font-medium text-zinc-800 shadow-sm backdrop-blur-sm transition-all duration-200 hover:border-zinc-400 hover:bg-white/90 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 dark:border-white/20 dark:bg-white/[0.06] dark:text-white/80 dark:hover:border-white/45 dark:hover:bg-white/[0.1] dark:hover:text-white dark:focus-visible:ring-white/30"
-            >
-              <Github className="h-4 w-4 shrink-0" aria-hidden />
-              {t('hero.viewSource')}
-            </button>
+            <div className="flex gap-3 sm:contents">
+              <Link
+                to="/signup"
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-zinc-300/90 bg-white/60 px-6 py-3 text-sm font-medium text-zinc-800 shadow-sm backdrop-blur-sm transition-all duration-200 hover:border-zinc-400 hover:bg-white/90 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 sm:flex-none dark:border-white/20 dark:bg-white/[0.06] dark:text-white/80 dark:hover:border-white/45 dark:hover:bg-white/[0.1] dark:hover:text-white dark:focus-visible:ring-white/30"
+              >
+                {t('hero.getStarted')}
+                <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
+              </Link>
+              <button
+                type="button"
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-zinc-300/90 bg-white/60 px-6 py-3 text-sm font-medium text-zinc-800 shadow-sm backdrop-blur-sm transition-all duration-200 hover:border-zinc-400 hover:bg-white/90 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 sm:flex-none dark:border-white/20 dark:bg-white/[0.06] dark:text-white/80 dark:hover:border-white/45 dark:hover:bg-white/[0.1] dark:hover:text-white dark:focus-visible:ring-white/30"
+              >
+                <Github className="h-4 w-4 shrink-0" aria-hidden />
+                {t('hero.viewSource')}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -507,7 +509,7 @@ function Hero() {
       {/* Scroll indicator */}
       <button
         onClick={() => document.getElementById('northstar').scrollIntoView({ behavior: 'smooth' })}
-        className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2 cursor-pointer group"
+        className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2 cursor-pointer group sm:bottom-10"
         aria-label={t('hero.scrollToNorthstar')}
       >
         <span className="text-xs font-mono tracking-widest uppercase text-zinc-500 transition-colors group-hover:text-zinc-700 dark:text-white/20 dark:group-hover:text-white/40">
@@ -583,7 +585,7 @@ function ProjectNorthstar() {
   return (
     <section
       id="northstar"
-      className="relative z-10 overflow-hidden py-40 px-6 bg-zinc-200/30 backdrop-blur-[2px] dark:bg-[#0a0a0a]/80"
+      className="relative z-10 overflow-hidden py-20 px-4 sm:px-6 md:py-40 bg-zinc-200/30 backdrop-blur-[2px] dark:bg-[#0a0a0a]/80"
     >
       {/* Radial glow behind star */}
       <div
@@ -619,7 +621,7 @@ function ProjectNorthstar() {
 
         <NorthStar size={56} />
 
-        <h2 className="bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-500 bg-clip-text pb-[0.12em] text-5xl font-bold leading-none tracking-tight text-transparent md:text-7xl dark:from-white dark:via-white dark:to-white/35">
+        <h2 className="bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-500 bg-clip-text pb-[0.12em] text-4xl font-bold leading-none tracking-tight text-transparent sm:text-5xl md:text-7xl dark:from-white dark:via-white dark:to-white/35">
           {t('northstar.title')}
         </h2>
 
@@ -657,7 +659,7 @@ function Footer() {
 
   return (
     <footer className="relative z-10 border-t border-zinc-200 bg-zinc-100 px-6 py-10 dark:border-white/8 dark:bg-[#0a0a0a]">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="max-w-7xl mx-auto flex flex-col items-center gap-4 text-center md:flex-row md:items-center md:justify-between md:text-left">
         <div className="flex items-center gap-2">
           <BrandMark className="h-4 w-4 opacity-50" />
           <span className="text-zinc-600 dark:text-white/30 text-sm">Modulon v0.1.0</span>
