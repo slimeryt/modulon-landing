@@ -53,6 +53,7 @@
     "appId": "com.modulon.app",
     "productName": "Modulon",
     "copyright": "Copyright © 2025 Modulon",
+    "npmRebuild": false,
     "directories": {
       "output": "dist-electron"
     },

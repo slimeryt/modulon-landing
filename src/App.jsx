@@ -6,6 +6,7 @@ import LoginPage from './LoginPage';
 import SignUpPage from './SignUpPage';
 import StatusPage from './StatusPage';
 import ChangelogPage from './ChangelogPage';
+import DownloadsPage from './DownloadsPage';
 import CookiesPage from './CookiesPage';
 import CookieConsent from './CookieConsent';
 import { useAuth } from './AuthContext';
@@ -44,6 +45,7 @@ export default function App() {
         />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
+        <Route path="/downloads" element={<DownloadsPage />} />
         <Route path="/status" element={<StatusPage />} />
         <Route path="/changelog" element={<ChangelogPage />} />
         <Route path="/cookies" element={<CookiesPage />} />

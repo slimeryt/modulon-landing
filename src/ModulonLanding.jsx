@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
+  Download,
   Github,
   LogIn,
   LogOut,
@@ -355,6 +356,13 @@ function Navbar() {
             <span className="text-zinc-600 dark:text-white/30 text-xs font-mono ml-1">v0.1.0</span>
           </Link>
           <div className="flex items-center gap-2 sm:gap-3">
+            <Link
+              to="/downloads"
+              className="hidden sm:inline-flex items-center gap-1.5 rounded-full border border-zinc-300/80 bg-white/70 px-3 py-1.5 text-xs font-medium text-zinc-700 backdrop-blur-sm transition-all duration-200 hover:border-zinc-400/90 hover:bg-white hover:text-zinc-900 dark:border-white/[0.1] dark:bg-white/[0.05] dark:text-white/70 dark:hover:border-white/20 dark:hover:bg-white/[0.09] dark:hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40 dark:focus-visible:ring-white/25"
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden />
+              Downloads
+            </Link>
             <LanguagePicker />
             <div className="flex items-center gap-2">
               {firebaseConfigured && user ? (
