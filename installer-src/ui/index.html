@@ -607,11 +607,11 @@ async function startInstall() {
 }
 
 function launchApp() {
-  window.setup.launch(installDir);
+  window.setup.launch(installDir + '\\Modulon.exe');
 }
 
 function openInstallDir() {
-  window.setup.launch(installDir + '\\.');  // open folder via shell
+  window.setup.launch(installDir);  // directory → opens in Explorer
 }
 
 function runUninstall() {
@@ -621,7 +621,7 @@ function runUninstall() {
 }
 
 function finish() {
-  if (document.getElementById('cb-launch').checked) window.setup.launch(installDir);
+  if (document.getElementById('cb-launch').checked) window.setup.launch(installDir + '\\Modulon.exe');
   else window.setup.close();
 }
 
