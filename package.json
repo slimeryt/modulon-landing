@@ -17,7 +17,9 @@
     "preview": "vite preview",
     "rebuild:native": "npm rebuild better-sqlite3",
     "electron:dev": "concurrently -k -n vite,api,electron -c blue,magenta,cyan \"vite\" \"node server/chat-api.mjs\" \"wait-on http://localhost:5181 && electron .\"",
-    "electron:build": "vite build --base=./ && electron-builder",
+    "electron:package": "vite build --base=./ && electron-builder --dir",
+    "electron:installer": "node build/make-installer.mjs",
+    "electron:build": "npm run electron:package && npm run electron:installer",
     "android:sync": "npm run build && npx cap sync android",
     "android:open": "npx cap open android"
   },
@@ -25,9 +27,6 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@capacitor/android": "^8.3.4",
-    "@capacitor/cli": "^8.3.4",
-    "@capacitor/core": "^8.3.4",
     "better-sqlite3": "^12.9.0",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
@@ -39,6 +38,9 @@
     "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
     "concurrently": "^9.0.1",
