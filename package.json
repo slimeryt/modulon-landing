@@ -20,6 +20,7 @@
     "electron:package": "vite build --base=./ && electron-builder --dir",
     "electron:installer": "node build/make-installer.mjs",
     "electron:build": "npm run electron:package && npm run electron:installer",
+    "electron:upload": "gh release upload v0.1.0 dist-electron/Modulon-Setup.exe dist-electron/Modulon-App.zip --clobber",
     "android:sync": "npm run build && npx cap sync android",
     "android:open": "npx cap open android"
   },

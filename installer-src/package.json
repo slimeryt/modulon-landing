@@ -1,0 +1,32 @@
+{
+  "name": "modulon-setup",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.js",
+  "devDependencies": {
+    "electron": "^42.1.0",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "com.modulon.setup",
+    "productName": "Modulon Setup",
+    "copyright": "Copyright © 2025 Modulon",
+    "npmRebuild": false,
+    "asar": true,
+    "directories": {
+      "output": "../dist-installer"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "ui/**/*"
+    ],
+    "win": {
+      "target": [{ "target": "portable", "arch": ["x64"] }],
+      "icon": "../public/icon.ico"
+    },
+    "portable": {
+      "artifactName": "${productName}.exe"
+    }
+  }
+}

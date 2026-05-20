@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Modulon Setup</title>
+<style>
+/* ── Reset ─────────────────────────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{width:820px;height:520px;overflow:hidden;background:#0a0a0a;
+  color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  font-size:14px;-webkit-font-smoothing:antialiased;user-select:none}
+
+/* ── Title bar ─────────────────────────────────────────────────────────────── */
+#tb{
+  position:fixed;top:0;left:0;right:0;height:38px;
+  background:#090909;border-bottom:1px solid #161616;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 14px;z-index:200;-webkit-app-region:drag;
+}
+#tb-label{font-size:11px;color:#383838;letter-spacing:.08em;text-transform:uppercase;font-weight:500}
+#tb-btns{display:flex;gap:6px;-webkit-app-region:no-drag}
+.tb-btn{
+  width:26px;height:26px;border:1px solid #1c1c1c;background:transparent;
+  color:#383838;border-radius:6px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s,color .15s,border-color .15s;
+}
+.tb-btn:hover{background:#161616;color:#888;border-color:#282828}
+#tb-close:hover{background:#2d0d0d;color:#c04040;border-color:#4a1818}
+
+/* ── Layout ─────────────────────────────────────────────────────────────────── */
+#app{display:flex;height:482px;margin-top:38px}
+
+/* ── Sidebar ────────────────────────────────────────────────────────────────── */
+#sidebar{
+  width:230px;flex-shrink:0;
+  background:#090909;border-right:1px solid #141414;
+  display:flex;flex-direction:column;
+  padding:36px 26px 28px;
+  position:relative;overflow:hidden;
+}
+/* dot-grid decoration, bottom-right */
+#sidebar::after{
+  content:'';position:absolute;bottom:-10px;right:-10px;
+  width:140px;height:140px;
+  background-image:radial-gradient(circle,#1e1e1e 1.2px,transparent 1.2px);
+  background-size:13px 13px;pointer-events:none;
+}
+.s-logo{
+  width:44px;height:44px;background:#fff;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:18px;flex-shrink:0;
+}
+.s-logo svg{width:24px;height:24px}
+.s-name{font-size:20px;font-weight:700;letter-spacing:-.03em;margin-bottom:4px}
+.s-ver{
+  display:inline-flex;align-items:center;gap:5px;
+  font-size:10px;color:#333;letter-spacing:.06em;
+  text-transform:uppercase;margin-bottom:22px;
+}
+.s-ver span{width:3px;height:3px;background:#2a2a2a;border-radius:50%;display:inline-block}
+.s-desc{font-size:12px;color:#303030;line-height:1.75;max-width:170px}
+.s-steps{margin-top:auto;display:flex;flex-direction:column;gap:11px}
+.si{
+  display:flex;align-items:center;gap:9px;
+  font-size:11px;color:#242424;
+  transition:color .3s;
+}
+.si.active{color:#888}
+.si.done{color:#363636}
+.si-dot{
+  width:5px;height:5px;border-radius:50%;background:#1e1e1e;
+  flex-shrink:0;transition:background .3s;
+}
+.si.active .si-dot{background:#fff}
+.si.done .si-dot{background:#444}
+
+/* ── Main area ──────────────────────────────────────────────────────────────── */
+#main{
+  flex:1;display:flex;flex-direction:column;
+  padding:38px 42px 30px;position:relative;overflow:hidden;
+}
+
+/* ── Steps ──────────────────────────────────────────────────────────────────── */
+.step{display:none;flex-direction:column;height:100%}
+.step.active{display:flex}
+
+.step-title{
+  font-size:21px;font-weight:600;letter-spacing:-.025em;
+  margin-bottom:8px;color:#fff;
+}
+.step-sub{
+  font-size:12.5px;color:#404040;line-height:1.7;
+  max-width:370px;margin-bottom:28px;
+}
+
+/* ── Step 0: Welcome ────────────────────────────────────────────────────────── */
+.feat-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:9px;
+  margin-bottom:auto;
+}
+.feat{
+  background:#0d0d0d;border:1px solid #161616;
+  border-radius:9px;padding:14px 16px;
+}
+.feat-name{font-size:12px;font-weight:600;color:#c8c8c8;margin-bottom:4px}
+.feat-desc{font-size:11px;color:#383838;line-height:1.6}
+
+/* ── Step 1: Directory ──────────────────────────────────────────────────────── */
+.dir-row{display:flex;gap:8px;margin-bottom:18px}
+.dir-input{
+  flex:1;background:#0d0d0d;border:1px solid #1a1a1a;
+  border-radius:8px;color:#686868;font-size:11.5px;
+  padding:10px 13px;outline:none;
+  font-family:'Consolas','Courier New',monospace;
+  transition:border-color .2s,color .2s;
+}
+.dir-input:focus{border-color:#2c2c2c;color:#888}
+.btn-browse{
+  background:#0d0d0d;border:1px solid #1a1a1a;border-radius:8px;
+  color:#444;font-size:12px;padding:0 16px;cursor:pointer;white-space:nowrap;
+  transition:background .15s,color .15s,border-color .15s;
+}
+.btn-browse:hover{background:#141414;color:#888;border-color:#2c2c2c}
+.cb-list{display:flex;flex-direction:column;gap:11px}
+.cb-row{
+  display:flex;align-items:center;gap:10px;
+  cursor:pointer;font-size:12.5px;color:#383838;
+  transition:color .15s;
+}
+.cb-row:hover{color:#777}
+.cb-row input[type=checkbox]{display:none}
+.cb-box{
+  width:16px;height:16px;border:1px solid #242424;border-radius:4px;
+  background:#0d0d0d;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .15s,border-color .15s;
+}
+.cb-row input:checked~.cb-box{background:#fff;border-color:#fff}
+.cb-tick{width:10px;height:10px;display:none;pointer-events:none}
+.cb-row input:checked~.cb-box .cb-tick{display:block}
+
+/* ── Step 2: Installing ─────────────────────────────────────────────────────── */
+.prog-meta{
+  display:flex;justify-content:space-between;
+  font-size:11px;color:#353535;margin-bottom:8px;
+  font-variant-numeric:tabular-nums;
+}
+.prog-track{height:2px;background:#141414;border-radius:2px;overflow:hidden;margin-bottom:0}
+.prog-fill{
+  height:100%;background:#fff;border-radius:2px;
+  width:0%;transition:width .45s cubic-bezier(.4,0,.2,1);
+  position:relative;overflow:hidden;
+}
+.prog-fill::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.5) 50%,transparent 100%);
+  animation:shim 1.8s infinite;
+}
+@keyframes shim{0%{transform:translateX(-100%)}100%{transform:translateX(200%)}}
+
+.log-box{
+  flex:1;margin-top:16px;
+  background:#0d0d0d;border:1px solid #141414;border-radius:9px;
+  padding:12px 14px;overflow-y:auto;
+  font-family:'Consolas','Courier New',monospace;font-size:11px;
+  scroll-behavior:smooth;
+}
+.log-box::-webkit-scrollbar{width:3px}
+.log-box::-webkit-scrollbar-track{background:transparent}
+.log-box::-webkit-scrollbar-thumb{background:#222;border-radius:2px}
+.ll{line-height:1.6;color:#2c2c2c;margin-bottom:1px}
+.ll.cur{color:#484848}
+
+.err-box{
+  background:#160d0d;border:1px solid #3a1a1a;border-radius:9px;
+  padding:12px 16px;font-size:12px;color:#b84040;
+  margin-top:14px;display:none;
+}
+.err-box.show{display:block}
+
+/* ── Step 3: Done ───────────────────────────────────────────────────────────── */
+.done-ring{
+  width:52px;height:52px;border:1.5px solid #242424;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:22px;
+}
+.done-ring svg{width:22px;height:22px;stroke:#fff;stroke-width:2.2;
+  fill:none;stroke-linecap:round;stroke-linejoin:round}
+.done-ring svg path{
+  stroke-dasharray:32;stroke-dashoffset:32;
+  animation:draw .5s .25s ease forwards;
+}
+@keyframes draw{to{stroke-dashoffset:0}}
+
+/* ── Actions / Buttons ──────────────────────────────────────────────────────── */
+.actions{margin-top:auto;display:flex;justify-content:flex-end;gap:9px;align-items:center}
+.btn{
+  padding:9px 22px;border-radius:8px;font-size:13px;font-weight:500;
+  cursor:pointer;transition:all .15s;border:none;outline:none;
+  font-family:inherit;
+}
+.btn-primary{background:#fff;color:#090909}
+.btn-primary:hover{background:#e8e8e8}
+.btn-primary:disabled{background:#1c1c1c;color:#363636;cursor:not-allowed}
+.btn-ghost{
+  background:transparent;color:#3a3a3a;
+  border:1px solid #1c1c1c;
+}
+.btn-ghost:hover{background:#111;color:#777;border-color:#2c2c2c}
+</style>
+</head>
+<body>
+
+<!-- Title bar -->
+<div id="tb">
+  <span id="tb-label">Modulon Setup</span>
+  <div id="tb-btns">
+    <button class="tb-btn" id="tb-min">
+      <svg width="10" height="1.5" viewBox="0 0 10 1.5" fill="none">
+        <rect width="10" height="1.5" rx=".75" fill="currentColor"/>
+      </svg>
+    </button>
+    <button class="tb-btn" id="tb-close">
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+        <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<!-- Layout -->
+<div id="app">
+
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div class="s-logo">
+      <!-- Modulon "M" logomark -->
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 20V6l10 8 10-8v14" stroke="#0a0a0a" stroke-width="2.4"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="s-name">Modulon</div>
+    <div class="s-ver"><span></span>v0.1.0</div>
+    <div class="s-desc">AI chatbot trained on real human conversation.</div>
+
+    <div class="s-steps" id="s-steps">
+      <div class="si active" data-s="0"><div class="si-dot"></div><span>Welcome</span></div>
+      <div class="si" data-s="1"><div class="si-dot"></div><span>Location</span></div>
+      <div class="si" data-s="2"><div class="si-dot"></div><span>Installing</span></div>
+      <div class="si" data-s="3"><div class="si-dot"></div><span>Complete</span></div>
+    </div>
+  </div>
+
+  <!-- Main area -->
+  <div id="main">
+
+    <!-- Step 0: Welcome -->
+    <div class="step active" id="s0">
+      <div class="step-title">Welcome</div>
+      <div class="step-sub">Modulon is an AI chatbot trained on real human conversation. This wizard will guide you through installation.</div>
+      <div class="feat-grid">
+        <div class="feat">
+          <div class="feat-name">Seq2Seq Model</div>
+          <div class="feat-desc">Custom encoder–decoder architecture built from scratch</div>
+        </div>
+        <div class="feat">
+          <div class="feat-name">Real Dialogue</div>
+          <div class="feat-desc">Trained on authentic human conversation data</div>
+        </div>
+        <div class="feat">
+          <div class="feat-name">65K+ Pairs</div>
+          <div class="feat-desc">Diverse training set for natural, varied replies</div>
+        </div>
+        <div class="feat">
+          <div class="feat-name">Local Runtime</div>
+          <div class="feat-desc">Runs entirely on your device — no API needed</div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" onclick="goStep(1)">Get Started →</button>
+      </div>
+    </div>
+
+    <!-- Step 1: Directory -->
+    <div class="step" id="s1">
+      <div class="step-title">Install Location</div>
+      <div class="step-sub">Choose where Modulon will be installed. We recommend keeping the default location.</div>
+      <div class="dir-row">
+        <input id="dir-inp" class="dir-input" type="text" readonly />
+        <button class="btn-browse" id="btn-browse">Browse</button>
+      </div>
+      <div class="cb-list">
+        <label class="cb-row">
+          <input type="checkbox" id="cb-desk" checked />
+          <div class="cb-box">
+            <svg class="cb-tick" viewBox="0 0 10 10" fill="none">
+              <path d="M1.5 5L4 7.5L8.5 2.5" stroke="#0a0a0a" stroke-width="1.5"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          Create desktop shortcut
+        </label>
+        <label class="cb-row">
+          <input type="checkbox" id="cb-start" checked />
+          <div class="cb-box">
+            <svg class="cb-tick" viewBox="0 0 10 10" fill="none">
+              <path d="M1.5 5L4 7.5L8.5 2.5" stroke="#0a0a0a" stroke-width="1.5"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          Add to Start Menu
+        </label>
+      </div>
+      <div class="actions">
+        <button class="btn btn-ghost" onclick="goStep(0)">← Back</button>
+        <button class="btn btn-primary" id="btn-install" onclick="startInstall()">Install</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Installing -->
+    <div class="step" id="s2">
+      <div class="step-title">Installing</div>
+      <div class="step-sub">Downloading and installing Modulon. Keep your internet connection active.</div>
+      <div class="prog-meta">
+        <span id="prog-phase">Initializing...</span>
+        <span id="prog-pct">0%</span>
+      </div>
+      <div class="prog-track">
+        <div class="prog-fill" id="prog-fill"></div>
+      </div>
+      <div class="log-box" id="log-box">
+        <div class="ll cur">Starting installation...</div>
+      </div>
+      <div class="err-box" id="err-box"></div>
+    </div>
+
+    <!-- Step 3: Done -->
+    <div class="step" id="s3">
+      <div class="step-title">Installation Complete</div>
+      <div class="step-sub">Modulon has been installed successfully and is ready to use.</div>
+      <div class="done-ring">
+        <svg viewBox="0 0 24 24">
+          <path d="M5 13l4 4L19 7"/>
+        </svg>
+      </div>
+      <label class="cb-row" style="margin-bottom:auto">
+        <input type="checkbox" id="cb-launch" checked />
+        <div class="cb-box">
+          <svg class="cb-tick" viewBox="0 0 10 10" fill="none">
+            <path d="M1.5 5L4 7.5L8.5 2.5" stroke="#0a0a0a" stroke-width="1.5"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        Launch Modulon after closing
+      </label>
+      <div class="actions">
+        <button class="btn btn-primary" onclick="finish()">Finish</button>
+      </div>
+    </div>
+
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+'use strict';
+let step = 0;
+let installDir = '';
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  document.getElementById('tb-min').addEventListener('click', () => window.setup.minimize());
+  document.getElementById('tb-close').addEventListener('click', () => window.setup.close());
+  document.getElementById('btn-browse').addEventListener('click', browseDir);
+
+  const d = await window.setup.getDefaults();
+  installDir = d.installDir;
+  document.getElementById('dir-inp').value = installDir;
+
+  window.setup.onProgress(({ phase, percent }) => {
+    document.getElementById('prog-phase').textContent = phase;
+    document.getElementById('prog-pct').textContent = percent + '%';
+    document.getElementById('prog-fill').style.width = percent + '%';
+    appendLog(phase);
+  });
+});
+
+// ── Step navigation ───────────────────────────────────────────────────────────
+function goStep(n) {
+  document.getElementById('s' + step).classList.remove('active');
+  const indicators = document.querySelectorAll('.si');
+  indicators.forEach((el, i) => {
+    el.classList.remove('active', 'done');
+    if (i < n) el.classList.add('done');
+    if (i === n) el.classList.add('active');
+  });
+  step = n;
+  document.getElementById('s' + n).classList.add('active');
+}
+
+// ── Browse directory ──────────────────────────────────────────────────────────
+async function browseDir() {
+  const dir = await window.setup.browseDir();
+  if (dir) {
+    installDir = dir;
+    document.getElementById('dir-inp').value = dir;
+  }
+}
+
+// ── Start installation ────────────────────────────────────────────────────────
+async function startInstall() {
+  const desktopShortcut = document.getElementById('cb-desk').checked;
+  const startMenu       = document.getElementById('cb-start').checked;
+
+  document.getElementById('btn-install').disabled = true;
+  goStep(2);
+
+  const result = await window.setup.install({ installDir, desktopShortcut, startMenu });
+
+  if (result.ok) {
+    goStep(3);
+  } else {
+    const el = document.getElementById('err-box');
+    el.textContent = 'Installation failed: ' + result.error;
+    el.classList.add('show');
+  }
+}
+
+// ── Finish ────────────────────────────────────────────────────────────────────
+function finish() {
+  if (document.getElementById('cb-launch').checked) {
+    window.setup.launch(installDir);
+  } else {
+    window.setup.close();
+  }
+}
+
+// ── Log helper ────────────────────────────────────────────────────────────────
+function appendLog(msg) {
+  const box = document.getElementById('log-box');
+  // dim previous current line
+  const prev = box.querySelector('.ll.cur');
+  if (prev) prev.classList.remove('cur');
+  const el = document.createElement('div');
+  el.className = 'll cur';
+  el.textContent = '› ' + msg;
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+}
+</script>
+</body>
+</html>
