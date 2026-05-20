@@ -26,6 +26,14 @@ if (!existsSync(winUnpacked)) {
   process.exit(1);
 }
 
+// ── 0. Copy app icon into the installer ui/ folder ────────────────────────
+const iconSrc  = join(root, 'public', 'icon-512.png');
+const iconDest = join(installerSrc, 'ui', 'icon.png');
+if (existsSync(iconSrc)) {
+  copyFileSync(iconSrc, iconDest);
+  console.log('✓  Copied icon-512.png → installer-src/ui/icon.png');
+}
+
 // ── 1. Build the installer Electron app ───────────────────────────────────
 console.log('\n▶ Installing installer-src dependencies...');
 execSync('npm install --prefer-offline', { cwd: installerSrc, stdio: 'inherit' });
