@@ -159,16 +159,55 @@ html,body{
 .iic-label{font-size:10.5px;color:#2e2e2e;margin-bottom:2px}
 .iic-value{font-size:11.5px;color:#555;font-family:'Consolas','Courier New',monospace}
 
-/* launch method toggle */
-.lm-label{font-size:11px;color:#2e2e2e;margin-bottom:8px;letter-spacing:.02em}
-.lm-toggle{display:flex;gap:6px;margin-bottom:auto}
-.lm-btn{
-  flex:1;padding:9px 14px;border-radius:999px;border:1px solid #191919;
-  background:transparent;color:#333;font-size:11.5px;cursor:pointer;
-  transition:all .15s;font-family:inherit;text-align:center;
+/* ── Split launch button ─────────────────────────────────────────────────── */
+.split-wrap{position:relative;display:inline-flex;margin-bottom:auto}
+.split-btn{
+  display:inline-flex;align-items:center;
+  background:#fff;color:#090909;border-radius:999px;
+  border:none;overflow:visible;cursor:pointer;
+  box-shadow:0 1px 4px rgba(0,0,0,.3);
 }
-.lm-btn:hover{border-color:#252525;color:#666}
-.lm-btn.selected{background:#fff;color:#090909;border-color:#fff}
+.split-main{
+  padding:10px 22px;font-size:13px;font-weight:500;
+  background:transparent;border:none;color:inherit;
+  cursor:pointer;font-family:inherit;border-radius:999px 0 0 999px;
+  transition:background .15s;
+}
+.split-main:hover{background:rgba(0,0,0,.06)}
+.split-divider{width:1px;height:18px;background:rgba(0,0,0,.12);flex-shrink:0}
+.split-arrow{
+  padding:10px 14px;background:transparent;border:none;
+  color:inherit;cursor:pointer;border-radius:0 999px 999px 0;
+  display:flex;align-items:center;transition:background .15s;
+}
+.split-arrow:hover{background:rgba(0,0,0,.06)}
+.split-arrow svg{width:12px;height:12px;transition:transform .2s}
+.split-arrow.open svg{transform:rotate(180deg)}
+/* dropdown */
+.split-dropdown{
+  position:absolute;bottom:calc(100% + 8px);right:0;
+  background:#111;border:1px solid #1e1e1e;border-radius:12px;
+  padding:4px;min-width:220px;
+  display:none;z-index:400;
+  box-shadow:0 4px 20px rgba(0,0,0,.7);
+}
+.split-dropdown.open{display:block}
+.sd-item{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 13px;border-radius:8px;
+  cursor:pointer;font-size:12px;color:#555;
+  transition:background .15s,color .15s;
+}
+.sd-item:hover{background:#191919;color:#999}
+.sd-item.selected{color:#ccc}
+.sd-check{
+  width:14px;height:14px;flex-shrink:0;
+  stroke:#fff;stroke-width:2;fill:none;
+  stroke-linecap:round;stroke-linejoin:round;
+  opacity:0;
+}
+.sd-item.selected .sd-check{opacity:1}
+.sd-item-sub{font-size:10px;color:#2e2e2e;margin-top:1px}
 
 /* ── SETTINGS VIEW ──────────────────────────────────────────────────────── */
 .view-title{font-size:20px;font-weight:600;letter-spacing:-.025em;margin-bottom:5px}
@@ -417,15 +456,6 @@ html,body{
           </div>
         </div>
 
-        <div class="lm-label">Launch Method</div>
-        <div class="lm-toggle">
-          <button class="lm-btn selected" id="lm-normal" onclick="selectLaunchMode('normal')">
-            Normal Launch
-          </button>
-          <button class="lm-btn" id="lm-update" onclick="selectLaunchMode('update')">
-            Install Update &amp; Launch
-          </button>
-        </div>
       </div>
 
       <div class="actions" style="margin-top:16px">
@@ -434,8 +464,36 @@ html,body{
         </button>
         <button class="btn btn-ghost" id="home-btn-reinstall" style="display:none"
                 onclick="showView('install')">Reinstall</button>
-        <button class="btn btn-primary" id="home-btn-launch" style="display:none"
-                onclick="handleLaunch()">Launch Modulon</button>
+
+        <!-- Split launch button (visible when installed) -->
+        <div class="split-wrap" id="home-btn-launch" style="display:none">
+          <div class="split-btn">
+            <button class="split-main" onclick="handleLaunch()" id="split-label">Launch Modulon</button>
+            <div class="split-divider"></div>
+            <button class="split-arrow" id="split-arrow-btn" onclick="toggleDropdown(event)">
+              <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8"
+                   stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 4l4 4 4-4"/>
+              </svg>
+            </button>
+          </div>
+          <div class="split-dropdown" id="split-dropdown">
+            <div class="sd-item selected" id="sd-normal" onclick="selectLaunchMode('normal')">
+              <svg class="sd-check" viewBox="0 0 14 14"><path d="M2 7l4 4 6-7"/></svg>
+              <div>
+                <div>Normal Launch</div>
+                <div class="sd-item-sub">Start Modulon immediately</div>
+              </div>
+            </div>
+            <div class="sd-item" id="sd-update" onclick="selectLaunchMode('update')">
+              <svg class="sd-check" viewBox="0 0 14 14"><path d="M2 7l4 4 6-7"/></svg>
+              <div>
+                <div>Install Update &amp; Launch</div>
+                <div class="sd-item-sub">Download latest version, then start</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -591,10 +649,24 @@ function updateHomeState() {
   document.getElementById('home-installed').style.display   = inst ? 'flex'        : 'none';
   document.getElementById('installed-badge').style.display  = inst ? 'inline-flex' : 'none';
   document.getElementById('update-badge').style.display     = inst ? 'inline-flex' : 'none';
-  document.getElementById('home-btn-install').style.display   = inst ? 'none' : '';
-  document.getElementById('home-btn-launch').style.display    = inst ? ''     : 'none';
-  document.getElementById('home-btn-reinstall').style.display = inst ? ''     : 'none';
+  document.getElementById('home-btn-install').style.display   = inst ? 'none'         : '';
+  document.getElementById('home-btn-launch').style.display    = inst ? 'inline-flex'  : 'none';
+  document.getElementById('home-btn-reinstall').style.display = inst ? ''             : 'none';
 }
+
+function toggleDropdown(e) {
+  e.stopPropagation();
+  const dd  = document.getElementById('split-dropdown');
+  const btn = document.getElementById('split-arrow-btn');
+  const open = dd.classList.toggle('open');
+  btn.classList.toggle('open', open);
+}
+
+// close dropdown when clicking outside
+document.addEventListener('click', () => {
+  document.getElementById('split-dropdown')?.classList.remove('open');
+  document.getElementById('split-arrow-btn')?.classList.remove('open');
+});
 
 function showView(name) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -617,8 +689,13 @@ function setInstallStep(n) {
 
 function selectLaunchMode(mode) {
   launchMode = mode;
-  document.getElementById('lm-normal').classList.toggle('selected', mode === 'normal');
-  document.getElementById('lm-update').classList.toggle('selected', mode === 'update');
+  document.getElementById('sd-normal').classList.toggle('selected', mode === 'normal');
+  document.getElementById('sd-update').classList.toggle('selected', mode === 'update');
+  document.getElementById('split-label').textContent =
+    mode === 'update' ? 'Install Update & Launch' : 'Launch Modulon';
+  // close dropdown
+  document.getElementById('split-dropdown').classList.remove('open');
+  document.getElementById('split-arrow-btn').classList.remove('open');
 }
 
 async function handleLaunch() {
