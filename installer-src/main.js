@@ -168,24 +168,33 @@ function shortcut(target, linkPath) {
 
 /** Write Add/Remove Programs entry so the app appears in Settings → Apps. */
 function writeUninstall(installDir, exePath) {
-  const key = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${APP_NAME}`;
-  const uninstCmd = `powershell -NoProfile -WindowStyle Hidden -Command `
-    + `"taskkill /F /IM Modulon.exe /T 2>$null; `
-    + `Start-Sleep -Milliseconds 500; `
-    + `Remove-Item -LiteralPath '${installDir}' -Recurse -Force -ErrorAction SilentlyContinue; `
-    + `Remove-Item '$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Modulon' -Recurse -Force -ErrorAction SilentlyContinue; `
-    + `Remove-Item '$env:USERPROFILE\\Desktop\\Modulon.lnk' -Force -ErrorAction SilentlyContinue; `
-    + `reg delete \\"${key}\\" /f 2>$null"`;
+  // Write a self-contained uninstall.bat to the install dir.
+  // This avoids embedding a complex command with nested quotes directly in
+  // the reg add /d argument, which breaks cmd.exe's quoting rules.
+  const batPath = path.join(installDir, 'uninstall.bat');
+  const batLines = [
+    '@echo off',
+    `taskkill /F /IM Modulon.exe /T >nul 2>&1`,
+    `ping -n 2 127.0.0.1 >nul`,
+    // delete install dir — schedule via cmd /c so the bat can delete itself
+    `start "" /B cmd /c "ping -n 2 127.0.0.1 >nul & rd /s /q "${installDir}" & rd /s /q "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Modulon" >nul 2>&1 & del /f /q "%USERPROFILE%\\Desktop\\Modulon.lnk" >nul 2>&1 & reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Modulon" /f >nul 2>&1"`,
+    `exit`,
+  ];
+  fs.writeFileSync(batPath, batLines.join('\r\n'), 'utf8');
 
+  const key = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${APP_NAME}`;
+
+  // Now that UninstallString is just a plain bat path (no embedded quotes),
+  // individual reg add commands are safe to chain.
   const cmds = [
-    `reg add "${key}" /v DisplayName     /t REG_SZ    /d "Modulon"          /f`,
-    `reg add "${key}" /v DisplayVersion  /t REG_SZ    /d "${APP_VERSION}"   /f`,
-    `reg add "${key}" /v Publisher       /t REG_SZ    /d "Modulon"          /f`,
-    `reg add "${key}" /v InstallLocation /t REG_SZ    /d "${installDir}"    /f`,
-    `reg add "${key}" /v UninstallString /t REG_SZ    /d "${uninstCmd}"     /f`,
-    `reg add "${key}" /v DisplayIcon     /t REG_SZ    /d "${exePath}"       /f`,
-    `reg add "${key}" /v NoModify        /t REG_DWORD /d 1                  /f`,
-    `reg add "${key}" /v NoRepair        /t REG_DWORD /d 1                  /f`,
+    `reg add "${key}" /v DisplayName     /t REG_SZ    /d "Modulon"       /f`,
+    `reg add "${key}" /v DisplayVersion  /t REG_SZ    /d "${APP_VERSION}" /f`,
+    `reg add "${key}" /v Publisher       /t REG_SZ    /d "Modulon"       /f`,
+    `reg add "${key}" /v InstallLocation /t REG_SZ    /d "${installDir}" /f`,
+    `reg add "${key}" /v UninstallString /t REG_SZ    /d "${batPath}"    /f`,
+    `reg add "${key}" /v DisplayIcon     /t REG_SZ    /d "${exePath}"    /f`,
+    `reg add "${key}" /v NoModify        /t REG_DWORD /d 1               /f`,
+    `reg add "${key}" /v NoRepair        /t REG_DWORD /d 1               /f`,
   ].join(' && ');
 
   return run(cmds);
