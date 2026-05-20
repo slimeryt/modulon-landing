@@ -1,8 +1,27 @@
 'use strict';
-const { app, BrowserWindow, shell, Menu, nativeTheme } = require('electron');
+const { app, BrowserWindow, shell, Menu, nativeTheme, protocol, net } = require('electron');
 const path = require('path');
+const fs   = require('fs');
 
 const isDev = !app.isPackaged;
+
+// Must be called before app is ready.
+// Registers app:// as a privileged scheme so BrowserRouter (HTML5 history API)
+// works exactly like http:// — file:// doesn't support it.
+if (!isDev) {
+  protocol.registerSchemesAsPrivileged([
+    {
+      scheme: 'app',
+      privileges: {
+        secure: true,
+        standard: true,
+        supportFetchAPI: true,
+        corsEnabled: true,
+        stream: true,
+      },
+    },
+  ]);
+}
 
 function createWindow() {
   nativeTheme.themeSource = 'dark';
@@ -23,16 +42,17 @@ function createWindow() {
     },
   });
 
-  // Remove default menu bar (keeps keyboard shortcuts like Ctrl+R working in dev)
   if (!isDev) Menu.setApplicationMenu(null);
 
   if (isDev) {
-    win.loadURL('http://localhost:5181');
+    // Dev: Vite dev server handles routing; open directly on /chat
+    win.loadURL('http://localhost:5181/chat');
   } else {
-    win.loadFile(path.join(__dirname, '../dist/index.html'));
+    // Prod: custom protocol serves dist/ as if it were http://
+    win.loadURL('app://localhost/chat');
   }
 
-  // Open all target="_blank" links in the system browser, not inside Electron
+  // Open external links in the system browser, never inside Electron
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
@@ -40,6 +60,28 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  if (!isDev) {
+    const distDir = path.join(__dirname, '../dist');
+
+    // Serve the built Vite app via app:// with SPA fallback
+    protocol.handle('app', (request) => {
+      const { pathname } = new URL(request.url);
+
+      // Try the exact file first (assets, icons, manifest, etc.)
+      const candidate = path.join(distDir, pathname);
+      if (
+        pathname !== '/' &&
+        fs.existsSync(candidate) &&
+        fs.statSync(candidate).isFile()
+      ) {
+        return net.fetch(`file://${candidate}`);
+      }
+
+      // SPA fallback — let React Router handle the route
+      return net.fetch(`file://${path.join(distDir, 'index.html')}`);
+    });
+  }
+
   createWindow();
 
   app.on('activate', () => {
