@@ -10,18 +10,17 @@ html,body{width:820px;height:520px;overflow:hidden;background:#0a0a0a;
   color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
   font-size:14px;-webkit-font-smoothing:antialiased;user-select:none}
 
-/* ── Floating pill (top-right window controls) ──────────────────────────────── */
+/* ── Floating pill ──────────────────────────────────────────────────────────── */
 #pill{
   position:fixed;top:14px;right:14px;z-index:500;
   display:flex;align-items:center;gap:1px;
   background:#111;border:1px solid #1e1e1e;border-radius:999px;
-  padding:3px 3px;
-  -webkit-app-region:no-drag;
-  box-shadow:0 2px 8px rgba(0,0,0,.5);
+  padding:3px;-webkit-app-region:no-drag;
+  box-shadow:0 2px 12px rgba(0,0,0,.6);
 }
 .p-btn{
   width:26px;height:26px;border:none;background:transparent;
-  color:#383838;border-radius:999px;cursor:pointer;
+  color:#3a3a3a;border-radius:999px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
   transition:background .15s,color .15s;
 }
@@ -36,91 +35,127 @@ html,body{width:820px;height:520px;overflow:hidden;background:#0a0a0a;
   width:230px;flex-shrink:0;
   background:#090909;border-right:1px solid #141414;
   display:flex;flex-direction:column;
-  padding:32px 22px 24px;
-  position:relative;overflow:hidden;
+  padding:32px 20px 24px;position:relative;overflow:hidden;
   -webkit-app-region:drag;
 }
-/* dot-grid decoration */
 #sidebar::after{
   content:'';position:absolute;bottom:-10px;right:-10px;
-  width:140px;height:140px;
-  background-image:radial-gradient(circle,#1e1e1e 1.2px,transparent 1.2px);
-  background-size:13px 13px;pointer-events:none;
+  width:130px;height:130px;
+  background-image:radial-gradient(circle,#1a1a1a 1.2px,transparent 1.2px);
+  background-size:12px 12px;pointer-events:none;
 }
 .s-logo{
   width:40px;height:40px;background:#fff;border-radius:9px;
   display:flex;align-items:center;justify-content:center;
-  margin-bottom:14px;flex-shrink:0;
-  -webkit-app-region:no-drag;
+  margin-bottom:14px;flex-shrink:0;-webkit-app-region:no-drag;
 }
 .s-logo svg{width:22px;height:22px}
 .s-name{font-size:19px;font-weight:700;letter-spacing:-.03em;margin-bottom:3px}
 .s-ver{
   display:inline-flex;align-items:center;gap:5px;
-  font-size:10px;color:#333;letter-spacing:.06em;
-  text-transform:uppercase;margin-bottom:18px;
+  font-size:10px;color:#2e2e2e;letter-spacing:.06em;
+  text-transform:uppercase;margin-bottom:22px;
 }
-.s-ver span{width:3px;height:3px;background:#2a2a2a;border-radius:50%;display:inline-block}
-.s-desc{font-size:11.5px;color:#2a2a2a;line-height:1.75;max-width:170px;margin-bottom:20px}
+.s-ver-dot{width:3px;height:3px;background:#252525;border-radius:50%}
 
-/* ── Sidebar action buttons ─────────────────────────────────────────────────── */
-.s-actions{
-  display:flex;flex-direction:column;gap:4px;margin-bottom:20px;
-  -webkit-app-region:no-drag;
-}
-.s-action-btn{
+/* ── Sidebar nav ────────────────────────────────────────────────────────────── */
+.s-nav{display:flex;flex-direction:column;gap:2px;-webkit-app-region:no-drag}
+.s-nav-btn{
   display:flex;align-items:center;gap:9px;
-  padding:8px 10px;border-radius:8px;border:none;
-  background:transparent;color:#343434;font-size:12px;
+  padding:9px 11px;border-radius:8px;border:none;
+  background:transparent;color:#333;font-size:12.5px;
   cursor:pointer;transition:background .15s,color .15s;
   font-family:inherit;text-align:left;width:100%;
 }
-.s-action-btn:hover{background:#111;color:#777}
-.s-action-btn svg{width:14px;height:14px;stroke:currentColor;stroke-width:1.6;
-  fill:none;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.s-nav-btn:hover{background:#111;color:#777}
+.s-nav-btn.active{background:#131313;color:#aaa}
+.s-nav-btn svg{
+  width:14px;height:14px;stroke:currentColor;stroke-width:1.6;
+  fill:none;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;
+}
 
-/* ── Step indicators ────────────────────────────────────────────────────────── */
-.s-steps{margin-top:auto;display:flex;flex-direction:column;gap:10px}
-.si{
-  display:flex;align-items:center;gap:9px;
-  font-size:11px;color:#242424;transition:color .3s;
-}
-.si.active{color:#888}
-.si.done{color:#363636}
-.si-dot{
-  width:5px;height:5px;border-radius:50%;background:#1e1e1e;
-  flex-shrink:0;transition:background .3s;
-}
-.si.active .si-dot{background:#fff}
-.si.done .si-dot{background:#444}
+/* ── Install progress steps (shown only during install flow) ────────────────── */
+.s-divider{height:1px;background:#141414;margin:14px 0}
+.s-steps{display:flex;flex-direction:column;gap:9px}
+.si{display:flex;align-items:center;gap:9px;font-size:11px;color:#242424;transition:color .3s}
+.si.active{color:#888}.si.done{color:#363636}
+.si-dot{width:5px;height:5px;border-radius:50%;background:#1a1a1a;flex-shrink:0;transition:background .3s}
+.si.active .si-dot{background:#fff}.si.done .si-dot{background:#444}
+#install-progress-sidebar{display:none;margin-top:auto}
+#install-progress-sidebar.show{display:block}
 
 /* ── Main area ──────────────────────────────────────────────────────────────── */
-#main{
-  flex:1;display:flex;flex-direction:column;
-  padding:36px 42px 30px;position:relative;overflow:hidden;
-  -webkit-app-region:no-drag;
+#main{flex:1;display:flex;flex-direction:column;position:relative;overflow:hidden;-webkit-app-region:no-drag}
+
+/* ── Views ──────────────────────────────────────────────────────────────────── */
+.view{display:none;flex-direction:column;height:100%;padding:36px 42px 30px}
+.view.active{display:flex}
+
+/* ── HOME VIEW ──────────────────────────────────────────────────────────────── */
+#v-home .app-hero{
+  display:flex;align-items:center;gap:18px;margin-bottom:28px;padding-bottom:24px;
+  border-bottom:1px solid #111;
 }
-
-/* ── Steps ──────────────────────────────────────────────────────────────────── */
-.step{display:none;flex-direction:column;height:100%}
-.step.active{display:flex}
-
-.step-title{
-  font-size:21px;font-weight:600;letter-spacing:-.025em;
-  margin-bottom:8px;color:#fff;
+#v-home .hero-icon{
+  width:56px;height:56px;background:#fff;border-radius:14px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
 }
-.step-sub{
-  font-size:12.5px;color:#404040;line-height:1.7;
-  max-width:370px;margin-bottom:28px;
+#v-home .hero-icon svg{width:30px;height:30px}
+#v-home .hero-text-name{font-size:22px;font-weight:700;letter-spacing:-.03em;margin-bottom:4px}
+#v-home .hero-text-sub{font-size:12px;color:#404040;line-height:1.6}
+/* installed state */
+#v-home .installed-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:10px;color:#4a7a4a;letter-spacing:.05em;text-transform:uppercase;
+  background:#0d1a0d;border:1px solid #1a2e1a;border-radius:999px;
+  padding:3px 9px;margin-top:6px;
 }
+#v-home .installed-badge-dot{width:5px;height:5px;background:#4a7a4a;border-radius:50%}
 
-/* ── Step 0: Welcome ────────────────────────────────────────────────────────── */
-.feat-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:auto}
-.feat{background:#0d0d0d;border:1px solid #161616;border-radius:9px;padding:14px 16px}
-.feat-name{font-size:12px;font-weight:600;color:#c8c8c8;margin-bottom:4px}
-.feat-desc{font-size:11px;color:#383838;line-height:1.6}
+.feat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:auto}
+.feat{background:#0d0d0d;border:1px solid #141414;border-radius:9px;padding:13px 15px}
+.feat-name{font-size:12px;font-weight:600;color:#bbb;margin-bottom:3px}
+.feat-desc{font-size:11px;color:#333;line-height:1.6}
 
-/* ── Step 1: Directory ──────────────────────────────────────────────────────── */
+/* launch state cards */
+.launch-info{display:flex;flex-direction:column;gap:9px;margin-bottom:auto}
+.info-card{
+  background:#0d0d0d;border:1px solid #141414;border-radius:9px;
+  padding:13px 16px;display:flex;align-items:center;gap:14px;
+}
+.info-card-icon{
+  width:32px;height:32px;background:#111;border:1px solid #1a1a1a;
+  border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.info-card-icon svg{width:15px;height:15px;stroke:#444;stroke-width:1.6;
+  fill:none;stroke-linecap:round;stroke-linejoin:round}
+.info-card-label{font-size:11px;color:#333;margin-bottom:2px}
+.info-card-value{font-size:12px;color:#666;font-family:'Consolas','Courier New',monospace}
+
+/* ── SETTINGS VIEW ──────────────────────────────────────────────────────────── */
+#v-settings .view-title{font-size:21px;font-weight:600;letter-spacing:-.025em;margin-bottom:6px}
+#v-settings .view-sub{font-size:12.5px;color:#404040;line-height:1.7;margin-bottom:28px}
+.settings-list{display:flex;flex-direction:column;gap:10px;margin-bottom:auto}
+.setting-row{
+  display:flex;align-items:center;justify-content:space-between;
+  background:#0d0d0d;border:1px solid #141414;border-radius:9px;padding:14px 16px;
+}
+.setting-left{display:flex;flex-direction:column;gap:3px}
+.setting-label{font-size:12px;font-weight:500;color:#888}
+.setting-value{font-size:11px;color:#333;font-family:'Consolas','Courier New',monospace}
+.setting-action{
+  font-size:11.5px;color:#404040;background:transparent;border:1px solid #1e1e1e;
+  border-radius:6px;padding:6px 13px;cursor:pointer;font-family:inherit;
+  transition:background .15s,color .15s,border-color .15s;white-space:nowrap;
+}
+.setting-action:hover{background:#141414;color:#777;border-color:#2c2c2c}
+.setting-action.danger:hover{background:#1a0808;color:#c04040;border-color:#3a1212}
+.settings-note{font-size:11px;color:#272727;line-height:1.7;margin-top:4px}
+
+/* ── INSTALL FLOW VIEWS ─────────────────────────────────────────────────────── */
+.flow-title{font-size:21px;font-weight:600;letter-spacing:-.025em;margin-bottom:8px}
+.flow-sub{font-size:12.5px;color:#404040;line-height:1.7;max-width:370px;margin-bottom:28px}
+/* Directory */
 .dir-row{display:flex;gap:8px;margin-bottom:18px}
 .dir-input{
   flex:1;background:#0d0d0d;border:1px solid #1a1a1a;border-radius:8px;
@@ -150,28 +185,24 @@ html,body{width:820px;height:520px;overflow:hidden;background:#0a0a0a;
 .cb-row input:checked~.cb-box{background:#fff;border-color:#fff}
 .cb-tick{width:10px;height:10px;display:none;pointer-events:none}
 .cb-row input:checked~.cb-box .cb-tick{display:block}
-
-/* ── Step 2: Installing ─────────────────────────────────────────────────────── */
-.prog-meta{
-  display:flex;justify-content:space-between;
-  font-size:11px;color:#353535;margin-bottom:8px;font-variant-numeric:tabular-nums;
-}
+/* Progress */
+.prog-meta{display:flex;justify-content:space-between;font-size:11px;color:#353535;
+  margin-bottom:8px;font-variant-numeric:tabular-nums}
 .prog-track{height:2px;background:#141414;border-radius:2px;overflow:hidden}
 .prog-fill{
   height:100%;background:#fff;border-radius:2px;width:0%;
-  transition:width .45s cubic-bezier(.4,0,.2,1);
-  position:relative;overflow:hidden;
+  transition:width .45s cubic-bezier(.4,0,.2,1);position:relative;overflow:hidden;
 }
 .prog-fill::after{
   content:'';position:absolute;inset:0;
-  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.5) 50%,transparent 100%);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);
   animation:shim 1.8s infinite;
 }
 @keyframes shim{0%{transform:translateX(-100%)}100%{transform:translateX(200%)}}
 .log-box{
   flex:1;margin-top:16px;background:#0d0d0d;border:1px solid #141414;
   border-radius:9px;padding:12px 14px;overflow-y:auto;
-  font-family:'Consolas','Courier New',monospace;font-size:11px;scroll-behavior:smooth;
+  font-family:'Consolas','Courier New',monospace;font-size:11px;
 }
 .log-box::-webkit-scrollbar{width:3px}
 .log-box::-webkit-scrollbar-thumb{background:#222;border-radius:2px}
@@ -182,8 +213,7 @@ html,body{width:820px;height:520px;overflow:hidden;background:#0a0a0a;
   padding:12px 16px;font-size:12px;color:#b84040;margin-top:14px;display:none;
 }
 .err-box.show{display:block}
-
-/* ── Step 3: Done ───────────────────────────────────────────────────────────── */
+/* Done */
 .done-ring{
   width:52px;height:52px;border:1.5px solid #242424;border-radius:50%;
   display:flex;align-items:center;justify-content:center;margin-bottom:22px;
@@ -193,7 +223,7 @@ html,body{width:820px;height:520px;overflow:hidden;background:#0a0a0a;
 .done-ring svg path{stroke-dasharray:32;stroke-dashoffset:32;animation:draw .5s .25s ease forwards}
 @keyframes draw{to{stroke-dashoffset:0}}
 
-/* ── Buttons ────────────────────────────────────────────────────────────────── */
+/* ── Shared button styles ────────────────────────────────────────────────────── */
 .actions{margin-top:auto;display:flex;justify-content:flex-end;gap:9px;align-items:center}
 .btn{
   padding:9px 22px;border-radius:8px;font-size:13px;font-weight:500;
@@ -204,27 +234,27 @@ html,body{width:820px;height:520px;overflow:hidden;background:#0a0a0a;
 .btn-primary:disabled{background:#1c1c1c;color:#363636;cursor:not-allowed}
 .btn-ghost{background:transparent;color:#3a3a3a;border:1px solid #1c1c1c}
 .btn-ghost:hover{background:#111;color:#777;border-color:#2c2c2c}
+.btn-danger{background:transparent;color:#803030;border:1px solid #2a1010}
+.btn-danger:hover{background:#1a0808;color:#c04040;border-color:#4a1515}
 </style>
 </head>
 <body>
 
-<!-- Floating pill: window controls top-right -->
+<!-- Floating pill -->
 <div id="pill">
-  <button class="p-btn" id="p-min" title="Minimize">
+  <button class="p-btn" id="p-min">
     <svg width="10" height="2" viewBox="0 0 10 2" fill="none">
       <rect width="10" height="1.5" rx=".75" fill="currentColor"/>
     </svg>
   </button>
-  <button class="p-btn" id="p-close" title="Close">
+  <button class="p-btn" id="p-close">
     <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
       <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
     </svg>
   </button>
 </div>
 
-<!-- Layout -->
 <div id="app">
-
   <!-- Sidebar -->
   <div id="sidebar">
     <div class="s-logo">
@@ -234,19 +264,15 @@ html,body{width:820px;height:520px;overflow:hidden;background:#0a0a0a;
       </svg>
     </div>
     <div class="s-name">Modulon</div>
-    <div class="s-ver"><span></span>v0.1.0</div>
-    <div class="s-desc">AI chatbot trained on real human conversation.</div>
+    <div class="s-ver"><div class="s-ver-dot"></div>v0.1.0</div>
 
-    <!-- Sidebar action buttons -->
-    <div class="s-actions">
-      <button class="s-action-btn" id="sb-settings">
-        <svg viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
-        </svg>
-        Settings
+    <nav class="s-nav" id="s-nav">
+      <button class="s-nav-btn active" id="nb-home" onclick="showView('home')">
+        <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Home
       </button>
-      <button class="s-action-btn" id="sb-install" onclick="jumpToInstall()">
+      <button class="s-nav-btn" id="nb-install" onclick="showView('install')">
         <svg viewBox="0 0 24 24">
           <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
           <polyline points="7 10 12 15 17 10"/>
@@ -254,25 +280,50 @@ html,body{width:820px;height:520px;overflow:hidden;background:#0a0a0a;
         </svg>
         Installation
       </button>
-    </div>
+      <button class="s-nav-btn" id="nb-settings" onclick="showView('settings')">
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
+        Settings
+      </button>
+    </nav>
 
-    <!-- Step indicators -->
-    <div class="s-steps" id="s-steps">
-      <div class="si active" data-s="0"><div class="si-dot"></div><span>Welcome</span></div>
-      <div class="si" data-s="1"><div class="si-dot"></div><span>Location</span></div>
-      <div class="si" data-s="2"><div class="si-dot"></div><span>Installing</span></div>
-      <div class="si" data-s="3"><div class="si-dot"></div><span>Complete</span></div>
+    <!-- Install flow progress (visible only during install steps) -->
+    <div id="install-progress-sidebar">
+      <div class="s-divider"></div>
+      <div class="s-steps">
+        <div class="si" id="si-0"><div class="si-dot"></div><span>Location</span></div>
+        <div class="si" id="si-1"><div class="si-dot"></div><span>Installing</span></div>
+        <div class="si" id="si-2"><div class="si-dot"></div><span>Complete</span></div>
+      </div>
     </div>
   </div>
 
-  <!-- Main area -->
+  <!-- Main -->
   <div id="main">
 
-    <!-- Step 0: Welcome -->
-    <div class="step active" id="s0">
-      <div class="step-title">Welcome</div>
-      <div class="step-sub">Modulon is an AI chatbot trained on real human conversation. This wizard will guide you through installation.</div>
-      <div class="feat-grid">
+    <!-- HOME VIEW ─────────────────────────────────────────────────────────── -->
+    <div class="view active" id="v-home">
+      <!-- Hero bar -->
+      <div class="app-hero">
+        <div class="hero-icon">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M2 20V6l10 8 10-8v14" stroke="#0a0a0a" stroke-width="2.4"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <div class="hero-text-name">Modulon</div>
+          <div class="hero-text-sub">AI chatbot trained on real human conversation</div>
+          <div class="installed-badge" id="installed-badge" style="display:none">
+            <div class="installed-badge-dot"></div>Installed
+          </div>
+        </div>
+      </div>
+
+      <!-- Feature cards (shown when not installed) -->
+      <div id="home-features" class="feat-grid">
         <div class="feat">
           <div class="feat-name">Seq2Seq Model</div>
           <div class="feat-desc">Custom encoder–decoder architecture built from scratch</div>
@@ -290,15 +341,91 @@ html,body{width:820px;height:520px;overflow:hidden;background:#0a0a0a;
           <div class="feat-desc">Runs entirely on your device — no API needed</div>
         </div>
       </div>
+
+      <!-- Info cards (shown when installed) -->
+      <div id="home-installed" class="launch-info" style="display:none">
+        <div class="info-card">
+          <div class="info-card-icon">
+            <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+              <polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </div>
+          <div>
+            <div class="info-card-label">Install location</div>
+            <div class="info-card-value" id="ic-path">—</div>
+          </div>
+        </div>
+        <div class="info-card">
+          <div class="info-card-icon">
+            <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>
+          <div>
+            <div class="info-card-label">Version</div>
+            <div class="info-card-value">v0.1.0</div>
+          </div>
+        </div>
+        <div class="info-card">
+          <div class="info-card-icon">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/>
+              <polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div>
+            <div class="info-card-label">Status</div>
+            <div class="info-card-value">Ready to use</div>
+          </div>
+        </div>
+      </div>
+
       <div class="actions">
-        <button class="btn btn-primary" onclick="goStep(1)">Get Started →</button>
+        <!-- Not installed -->
+        <button class="btn btn-primary" id="home-btn-install" onclick="showView('install')">
+          Install Modulon →
+        </button>
+        <!-- Installed -->
+        <button class="btn btn-ghost" id="home-btn-reinstall"
+                style="display:none" onclick="showView('install')">
+          Reinstall
+        </button>
+        <button class="btn btn-primary" id="home-btn-launch"
+                style="display:none" onclick="launchApp()">
+          Launch Modulon
+        </button>
       </div>
     </div>
 
-    <!-- Step 1: Directory -->
-    <div class="step" id="s1">
-      <div class="step-title">Install Location</div>
-      <div class="step-sub">Choose where Modulon will be installed. We recommend keeping the default location.</div>
+    <!-- SETTINGS VIEW ─────────────────────────────────────────────────────── -->
+    <div class="view" id="v-settings">
+      <div class="view-title">Settings</div>
+      <div class="view-sub">Manage your Modulon installation.</div>
+      <div class="settings-list">
+        <div class="setting-row">
+          <div class="setting-left">
+            <div class="setting-label">Install location</div>
+            <div class="setting-value" id="set-path">—</div>
+          </div>
+          <button class="setting-action" onclick="openInstallDir()">Open folder</button>
+        </div>
+        <div class="setting-row">
+          <div class="setting-left">
+            <div class="setting-label">Version</div>
+            <div class="setting-value">v0.1.0</div>
+          </div>
+          <button class="setting-action" onclick="showView('install')">Reinstall</button>
+        </div>
+        <div class="setting-row">
+          <div class="setting-left">
+            <div class="setting-label">Uninstall</div>
+            <div class="setting-value">Remove Modulon from this device</div>
+          </div>
+          <button class="setting-action danger" onclick="runUninstall()">Uninstall</button>
+        </div>
+      </div>
+      <p class="settings-note">Changes take effect immediately. Reinstalling will overwrite existing files.</p>
+    </div>
+
+    <!-- INSTALL — LOCATION ────────────────────────────────────────────────── -->
+    <div class="view" id="v-location">
+      <div class="flow-title">Install Location</div>
+      <div class="flow-sub">Choose where Modulon will be installed.</div>
       <div class="dir-row">
         <input id="dir-inp" class="dir-input" type="text" readonly />
         <button class="btn-browse" id="btn-browse">Browse</button>
@@ -326,32 +453,30 @@ html,body{width:820px;height:520px;overflow:hidden;background:#0a0a0a;
         </label>
       </div>
       <div class="actions">
-        <button class="btn btn-ghost" onclick="goStep(0)">← Back</button>
+        <button class="btn btn-ghost" onclick="showView('home')">← Cancel</button>
         <button class="btn btn-primary" id="btn-install" onclick="startInstall()">Install</button>
       </div>
     </div>
 
-    <!-- Step 2: Installing -->
-    <div class="step" id="s2">
-      <div class="step-title">Installing</div>
-      <div class="step-sub">Downloading and installing Modulon. Keep your internet connection active.</div>
+    <!-- INSTALL — INSTALLING ──────────────────────────────────────────────── -->
+    <div class="view" id="v-installing">
+      <div class="flow-title">Installing</div>
+      <div class="flow-sub">Downloading and installing Modulon. Keep your internet connection active.</div>
       <div class="prog-meta">
         <span id="prog-phase">Initializing...</span>
         <span id="prog-pct">0%</span>
       </div>
-      <div class="prog-track">
-        <div class="prog-fill" id="prog-fill"></div>
-      </div>
+      <div class="prog-track"><div class="prog-fill" id="prog-fill"></div></div>
       <div class="log-box" id="log-box">
         <div class="ll cur">Starting installation...</div>
       </div>
       <div class="err-box" id="err-box"></div>
     </div>
 
-    <!-- Step 3: Done -->
-    <div class="step" id="s3">
-      <div class="step-title">Installation Complete</div>
-      <div class="step-sub">Modulon has been installed successfully and is ready to use.</div>
+    <!-- INSTALL — DONE ────────────────────────────────────────────────────── -->
+    <div class="view" id="v-done">
+      <div class="flow-title">Installation Complete</div>
+      <div class="flow-sub">Modulon has been installed and is ready to use.</div>
       <div class="done-ring">
         <svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>
       </div>
@@ -366,6 +491,7 @@ html,body{width:820px;height:520px;overflow:hidden;background:#0a0a0a;
         Launch Modulon after closing
       </label>
       <div class="actions">
+        <button class="btn btn-ghost" onclick="showView('home')">Back to Home</button>
         <button class="btn btn-primary" onclick="finish()">Finish</button>
       </div>
     </div>
@@ -375,8 +501,19 @@ html,body{width:820px;height:520px;overflow:hidden;background:#0a0a0a;
 
 <script>
 'use strict';
-let step = 0;
 let installDir = '';
+let isInstalled = false;
+let currentView = 'home';
+const INSTALL_FLOW_VIEWS = ['location','installing','done'];
+
+const VIEWS = {
+  home:       { el: 'v-home',       nav: 'nb-home'     },
+  settings:   { el: 'v-settings',   nav: 'nb-settings'  },
+  install:    { el: 'v-location',   nav: 'nb-install'   },
+  location:   { el: 'v-location',   nav: 'nb-install'   },
+  installing: { el: 'v-installing', nav: 'nb-install'   },
+  done:       { el: 'v-done',       nav: 'nb-install'   },
+};
 
 window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('p-min').addEventListener('click', () => window.setup.minimize());
@@ -386,58 +523,106 @@ window.addEventListener('DOMContentLoaded', async () => {
   const d = await window.setup.getDefaults();
   installDir = d.installDir;
   document.getElementById('dir-inp').value = installDir;
+  document.getElementById('ic-path').textContent = installDir;
+  document.getElementById('set-path').textContent = installDir;
+
+  isInstalled = await window.setup.checkInstalled();
+  updateHomeState();
 
   window.setup.onProgress(({ phase, percent }) => {
     document.getElementById('prog-phase').textContent = phase;
     document.getElementById('prog-pct').textContent = percent + '%';
     document.getElementById('prog-fill').style.width = percent + '%';
     appendLog(phase);
+    // sync sidebar step dots
+    if (percent < 72)      setInstallStep(0);
+    else if (percent < 94) setInstallStep(1);
+    else                   setInstallStep(2);
   });
 });
 
-function goStep(n) {
-  document.getElementById('s' + step).classList.remove('active');
-  const indicators = document.querySelectorAll('.si');
-  indicators.forEach((el, i) => {
-    el.classList.remove('active', 'done');
+function updateHomeState() {
+  document.getElementById('home-features').style.display   = isInstalled ? 'none' : 'grid';
+  document.getElementById('home-installed').style.display  = isInstalled ? 'flex' : 'none';
+  document.getElementById('installed-badge').style.display = isInstalled ? 'inline-flex' : 'none';
+  document.getElementById('home-btn-install').style.display   = isInstalled ? 'none' : '';
+  document.getElementById('home-btn-launch').style.display    = isInstalled ? '' : 'none';
+  document.getElementById('home-btn-reinstall').style.display = isInstalled ? '' : 'none';
+}
+
+function showView(name) {
+  // hide all
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.s-nav-btn').forEach(b => b.classList.remove('active'));
+
+  const cfg = VIEWS[name];
+  document.getElementById(cfg.el).classList.add('active');
+  document.getElementById(cfg.nav).classList.add('active');
+
+  // show install progress sidebar only during install flow
+  const inFlow = INSTALL_FLOW_VIEWS.includes(name) || name === 'install';
+  document.getElementById('install-progress-sidebar').classList.toggle('show', inFlow);
+
+  currentView = name;
+}
+
+function setInstallStep(n) {
+  ['si-0','si-1','si-2'].forEach((id, i) => {
+    const el = document.getElementById(id);
+    el.classList.remove('active','done');
     if (i < n) el.classList.add('done');
     if (i === n) el.classList.add('active');
   });
-  step = n;
-  document.getElementById('s' + n).classList.add('active');
-}
-
-function jumpToInstall() {
-  // If already past welcome, jump to step 1 (location); else just go to 1
-  if (step < 2) goStep(1);
 }
 
 async function browseDir() {
   const dir = await window.setup.browseDir();
-  if (dir) { installDir = dir; document.getElementById('dir-inp').value = dir; }
+  if (dir) {
+    installDir = dir;
+    document.getElementById('dir-inp').value = dir;
+    document.getElementById('ic-path').textContent = dir;
+    document.getElementById('set-path').textContent = dir;
+  }
 }
 
 async function startInstall() {
   const desktopShortcut = document.getElementById('cb-desk').checked;
   const startMenu       = document.getElementById('cb-start').checked;
   document.getElementById('btn-install').disabled = true;
-  goStep(2);
+  setInstallStep(0);
+  showView('installing');
+
   const result = await window.setup.install({ installDir, desktopShortcut, startMenu });
   if (result.ok) {
-    goStep(3);
+    isInstalled = true;
+    showView('done');
+    document.getElementById('install-progress-sidebar').classList.add('show');
+    setInstallStep(2);
   } else {
     const el = document.getElementById('err-box');
     el.textContent = 'Installation failed: ' + result.error;
     el.classList.add('show');
   }
+  document.getElementById('btn-install').disabled = false;
+}
+
+function launchApp() {
+  window.setup.launch(installDir);
+}
+
+function openInstallDir() {
+  window.setup.launch(installDir + '\\.');  // open folder via shell
+}
+
+function runUninstall() {
+  const bat = installDir + '\\uninstall.bat';
+  window.setup.launch(bat);
+  setTimeout(() => window.setup.close(), 1500);
 }
 
 function finish() {
-  if (document.getElementById('cb-launch').checked) {
-    window.setup.launch(installDir);
-  } else {
-    window.setup.close();
-  }
+  if (document.getElementById('cb-launch').checked) window.setup.launch(installDir);
+  else window.setup.close();
 }
 
 function appendLog(msg) {

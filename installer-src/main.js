@@ -42,6 +42,10 @@ ipcMain.on('win:close',    () => app.quit());
 
 ipcMain.handle('get-defaults', () => ({ installDir: DEFAULT_DIR, version: APP_VERSION }));
 
+ipcMain.handle('check-installed', () => {
+  return fs.existsSync(path.join(DEFAULT_DIR, `${APP_NAME}.exe`));
+});
+
 ipcMain.handle('browse-dir', async () => {
   const r = await dialog.showOpenDialog(win, {
     properties:  ['openDirectory', 'createDirectory'],
@@ -96,8 +100,14 @@ ipcMain.handle('start-install', async (_event, { installDir, desktopShortcut, st
   }
 });
 
-ipcMain.on('launch-app', (_event, installDir) => {
-  shell.openPath(path.join(installDir, `${APP_NAME}.exe`));
+ipcMain.on('launch-app', (_event, targetPath) => {
+  // targetPath can be the exe, a bat file, or a folder (open in Explorer)
+  const resolved = targetPath.endsWith('\\.') || targetPath.endsWith('/.')
+    ? path.dirname(targetPath)
+    : fs.existsSync(targetPath) && fs.statSync(targetPath).isDirectory()
+      ? targetPath
+      : targetPath;
+  shell.openPath(resolved);
   setTimeout(() => app.quit(), 1200);
 });
 
