@@ -10,7 +10,7 @@ const isDev = !app.isPackaged;
 
 // Deployed website URL — needed to open /desktop/login in the system browser.
 // Set VITE_PUBLIC_SITE_URL=https://your-site.com in your .env file.
-const SITE_URL = (process.env.VITE_PUBLIC_SITE_URL || 'https://modulon.xyz').replace(/\/$/, '');
+const SITE_URL = (process.env.VITE_PUBLIC_SITE_URL || 'https://www.modulon.xyz').replace(/\/$/, '');
 
 // ── Custom protocol: modulon:// ───────────────────────────────────────────────
 // Registers the app as the system handler for modulon:// links.
