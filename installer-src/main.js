@@ -9,7 +9,7 @@ const { exec } = require('child_process');
 
 const APP_NAME       = 'Modulon';
 const APP_VERSION    = '0.1.0';
-const LAUNCHER_VERSION = '0.1.0';
+const LAUNCHER_VERSION = '0.2.0';
 const REPO           = 'slimeryt/modulon-landing';
 const DOWNLOAD_URL   = 'https://github.com/slimeryt/modulon-landing/releases/latest/download/Modulon-App.zip';
 const DEFAULT_DIR    = path.join(os.homedir(), 'AppData', 'Local', 'Programs', APP_NAME);
