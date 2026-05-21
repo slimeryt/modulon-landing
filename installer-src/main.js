@@ -166,7 +166,6 @@ ipcMain.on('launch-app', (_event, targetPath) => {
       ? targetPath
       : targetPath;
   shell.openPath(resolved);
-  setTimeout(() => app.quit(), 1200);
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
