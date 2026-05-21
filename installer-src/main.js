@@ -9,7 +9,7 @@ const { exec } = require('child_process');
 
 const APP_NAME       = 'Modulon';
 const APP_VERSION    = '0.1.0';
-const LAUNCHER_VERSION = '0.2.0';
+const LAUNCHER_VERSION = '0.3.0';
 const REPO           = 'slimeryt/modulon-landing';
 const DOWNLOAD_URL   = 'https://github.com/slimeryt/modulon-landing/releases/latest/download/Modulon-App.zip';
 const DEFAULT_DIR    = path.join(os.homedir(), 'AppData', 'Local', 'Programs', APP_NAME);
@@ -81,13 +81,13 @@ ipcMain.handle('check-launcher-update', () => {
 
 // ── Self-update: download new launcher to Downloads folder, open it, quit ─────
 ipcMain.handle('self-update', async (_event, downloadUrl) => {
-  const dest = path.join(os.homedir(), 'Downloads', 'Modulon-Setup.exe');
+  // Use a unique name to avoid EBUSY if a previous download is still locked.
+  const dest = path.join(os.tmpdir(), `Modulon-Setup-${Date.now()}.exe`);
   try {
     await download(downloadUrl, dest, (pct) => {
       win?.webContents.send('update-dl-progress', pct);
     });
     shell.openPath(dest);
-    setTimeout(() => app.quit(), 1200);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
