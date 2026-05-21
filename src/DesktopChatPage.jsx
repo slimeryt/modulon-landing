@@ -571,8 +571,10 @@ export default function DesktopChatPage() {
 
       {/* ── Main content ── */}
       <main
-        className={`relative z-10 h-screen min-h-0 w-full overflow-hidden px-4 transition-[margin] duration-200 ease-out sm:px-6 md:py-6 ${
-          sidebarOpen?'ml-[calc(18rem+2.5rem)]':'ml-[calc(3.5rem+2.5rem)]'
+        className={`relative z-10 h-screen min-h-0 overflow-hidden px-4 transition-[margin,width] duration-200 ease-out sm:px-6 md:py-6 ${
+          sidebarOpen
+            ? 'ml-[calc(18rem+2.5rem)] w-[calc(100%-18rem-2.5rem)]'
+            : 'ml-[calc(3.5rem+2.5rem)] w-[calc(100%-3.5rem-2.5rem)]'
         }`}
       >
         <div className={`mx-auto flex h-full flex-col ${isHome?'max-w-3xl':'max-w-2xl'}`}>
