@@ -6,6 +6,8 @@ import { useLanguage } from './LanguageContext';
 import { useTheme } from './ThemeContext';
 import modulonIcon from './assets/icons/Modulon_Icon.png';
 
+const isElectron = typeof navigator !== 'undefined' && navigator.userAgent.includes('Electron');
+
 function BrandMark({ className = 'h-5 w-5' }) {
   return (
     <img
@@ -198,7 +200,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!ready || !user || !firebaseConfigured) return;
-    const dest = location.state?.from?.pathname || '/chat';
+    const dest = location.state?.from?.pathname || (isElectron ? '/desktop' : '/chat');
     navigate(dest, { replace: true });
   }, [ready, user, firebaseConfigured, location.state, navigate]);
 
@@ -216,7 +218,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signInWithEmail(email, password);
-      const dest = location.state?.from?.pathname || '/chat';
+      const dest = location.state?.from?.pathname || (isElectron ? '/desktop' : '/chat');
       navigate(dest, { replace: true });
     } catch (err) {
       setError(mapAuthError(err));
@@ -234,13 +236,18 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signInWithGoogle();
-      const dest = location.state?.from?.pathname || '/chat';
+      const dest = location.state?.from?.pathname || (isElectron ? '/desktop' : '/chat');
       navigate(dest, { replace: true });
     } catch (err) {
       setError(mapAuthError(err));
     } finally {
       setLoading(false);
     }
+  };
+
+  // Desktop: open the /desktop/login page in the system browser instead of a popup
+  const handleGoogleDesktop = () => {
+    window.electronAPI?.openGoogleLogin();
   };
 
   const handlePasswordReset = async (e) => {
@@ -277,21 +284,31 @@ export default function LoginPage() {
         backgroundSize: '72px 72px',
       }}
     >
-      <Link
-        to="/"
-        aria-label="Home"
-        className="fixed left-5 top-5 z-[60] flex h-11 w-11 items-center justify-center rounded-full border border-zinc-200/50 bg-white/90 text-zinc-700 shadow-sm backdrop-blur-md transition-all hover:border-zinc-300/55 hover:bg-white hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40 dark:border-white/10 dark:bg-[#0c0c0e]/90 dark:text-white/80 dark:shadow-[0_4px_24px_-8px_rgba(0,0,0,0.5)] dark:hover:border-white/18 dark:hover:bg-white/[0.1] dark:hover:text-white dark:focus-visible:ring-white/25"
-      >
-        <Home className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
-      </Link>
+      {!isElectron && (
+        <Link
+          to="/"
+          aria-label="Home"
+          className="fixed left-5 top-5 z-[60] flex h-11 w-11 items-center justify-center rounded-full border border-zinc-200/50 bg-white/90 text-zinc-700 shadow-sm backdrop-blur-md transition-all hover:border-zinc-300/55 hover:bg-white hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40 dark:border-white/10 dark:bg-[#0c0c0e]/90 dark:text-white/80 dark:shadow-[0_4px_24px_-8px_rgba(0,0,0,0.5)] dark:hover:border-white/18 dark:hover:bg-white/[0.1] dark:hover:text-white dark:focus-visible:ring-white/25"
+        >
+          <Home className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+        </Link>
+      )}
       {/* ── Left — form panel ── */}
       <div className="relative z-10 flex min-h-screen w-full max-w-md flex-col justify-center px-8 py-16 max-sm:pl-[4.75rem]">
         {/* Logo */}
-        <Link to="/" className="mb-14 flex w-fit items-center gap-2 rounded-lg py-1 pl-1 pr-2 transition-opacity hover:opacity-90">
-          <BrandMark className="h-5 w-5 ml-3 object-right opacity-90 dark:opacity-95" />
-          <span className="font-semibold tracking-tight text-zinc-900 dark:text-white">Modulon</span>
-          <span className="font-mono text-xs text-zinc-500 dark:text-white/30">v0.1.0</span>
-        </Link>
+        {isElectron ? (
+          <div className="mb-14 flex w-fit items-center gap-2 py-1 pl-1 pr-2">
+            <BrandMark className="h-5 w-5 ml-3 object-right opacity-90 dark:opacity-95" />
+            <span className="font-semibold tracking-tight text-zinc-900 dark:text-white">Modulon</span>
+            <span className="font-mono text-xs text-zinc-500 dark:text-white/30">v0.1.0</span>
+          </div>
+        ) : (
+          <Link to="/" className="mb-14 flex w-fit items-center gap-2 rounded-lg py-1 pl-1 pr-2 transition-opacity hover:opacity-90">
+            <BrandMark className="h-5 w-5 ml-3 object-right opacity-90 dark:opacity-95" />
+            <span className="font-semibold tracking-tight text-zinc-900 dark:text-white">Modulon</span>
+            <span className="font-mono text-xs text-zinc-500 dark:text-white/30">v0.1.0</span>
+          </Link>
+        )}
 
         {/* Heading */}
         <div className="mb-8">
@@ -414,10 +431,11 @@ export default function LoginPage() {
           <div className="h-px flex-1 bg-zinc-200/45 dark:bg-white/6" />
         </div>
 
+        {/* Google button — popup on web, system-browser flow on desktop */}
         <button
           type="button"
-          onClick={handleGoogle}
-          disabled={loading || !firebaseConfigured}
+          onClick={isElectron ? handleGoogleDesktop : handleGoogle}
+          disabled={isElectron ? false : (loading || !firebaseConfigured)}
           className="w-full cursor-pointer rounded-full border border-zinc-200/50 bg-white px-8 py-3.5 text-sm font-medium text-zinc-800 shadow-sm transition-all duration-200 hover:border-zinc-300/55 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/[0.04] dark:text-white/90 dark:hover:border-white/18 dark:hover:bg-white/[0.08]"
         >
           Continue with Google

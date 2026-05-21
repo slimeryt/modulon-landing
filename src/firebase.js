@@ -1,5 +1,13 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, initializeAuth, browserLocalPersistence } from 'firebase/auth';
+
+// In Electron the page is served via app:// which is not an http/https origin.
+// Firebase's default indexedDB persistence uses a hidden iframe loaded from
+// authDomain that communicates back via postMessage — but that iframe rejects
+// non-http(s) parent origins, so auth silently breaks.
+// browserLocalPersistence uses localStorage directly with no iframe needed.
+const isElectron =
+  typeof navigator !== 'undefined' && navigator.userAgent.includes('Electron');
 
 function readFirebaseConfig() {
   if (typeof window !== 'undefined') {
@@ -36,7 +44,8 @@ export function isFirebaseConfigured() {
   );
 }
 
-let appInstance = null;
+let appInstance  = null;
+let authInstance = null;
 
 /** @returns {import('firebase/app').FirebaseApp | null} */
 export function getFirebaseApp() {
@@ -51,5 +60,10 @@ export function getFirebaseApp() {
 export function getFirebaseAuth() {
   const app = getFirebaseApp();
   if (!app) return null;
-  return getAuth(app);
+  if (!authInstance) {
+    authInstance = isElectron
+      ? initializeAuth(app, { persistence: browserLocalPersistence })
+      : getAuth(app);
+  }
+  return authInstance;
 }

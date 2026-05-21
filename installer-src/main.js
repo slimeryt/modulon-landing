@@ -7,10 +7,12 @@ const http  = require('http');
 const os    = require('os');
 const { exec } = require('child_process');
 
-const APP_NAME    = 'Modulon';
-const APP_VERSION = '0.1.0';
-const DOWNLOAD_URL = 'https://github.com/slimeryt/modulon-landing/releases/latest/download/Modulon-App.zip';
-const DEFAULT_DIR  = path.join(os.homedir(), 'AppData', 'Local', 'Programs', APP_NAME);
+const APP_NAME       = 'Modulon';
+const APP_VERSION    = '0.1.0';
+const LAUNCHER_VERSION = '0.1.0';
+const REPO           = 'slimeryt/modulon-landing';
+const DOWNLOAD_URL   = 'https://github.com/slimeryt/modulon-landing/releases/latest/download/Modulon-App.zip';
+const DEFAULT_DIR    = path.join(os.homedir(), 'AppData', 'Local', 'Programs', APP_NAME);
 
 let win;
 
@@ -40,11 +42,67 @@ app.on('window-all-closed', () => app.quit());
 ipcMain.on('win:minimize', () => win?.minimize());
 ipcMain.on('win:close',    () => app.quit());
 
-ipcMain.handle('get-defaults', () => ({ installDir: DEFAULT_DIR, version: APP_VERSION }));
+ipcMain.handle('get-defaults', () => ({
+  installDir:      DEFAULT_DIR,
+  version:         APP_VERSION,
+  launcherVersion: LAUNCHER_VERSION,
+}));
 
 ipcMain.handle('check-installed', () => {
   return fs.existsSync(path.join(DEFAULT_DIR, `${APP_NAME}.exe`));
 });
+
+// ── Launcher update check ─────────────────────────────────────────────────────
+ipcMain.handle('check-launcher-update', () => {
+  return new Promise((resolve) => {
+    const options = {
+      hostname: 'api.github.com',
+      path:     `/repos/${REPO}/releases/latest`,
+      headers:  { 'User-Agent': 'Modulon-Setup', 'Accept': 'application/vnd.github+json' },
+    };
+    https.get(options, (res) => {
+      let raw = '';
+      res.on('data', c => { raw += c; });
+      res.on('end', () => {
+        try {
+          const rel     = JSON.parse(raw);
+          const tag     = rel.tag_name || '';                       // e.g. "v0.2.0"
+          const latest  = tag.replace(/^v/, '');                   // "0.2.0"
+          const asset   = (rel.assets || []).find(a => a.name === 'Modulon-Setup.exe');
+          const hasUpdate = semverGt(latest, LAUNCHER_VERSION);
+          resolve({ hasUpdate, latest, tag, downloadUrl: asset?.browser_download_url || null });
+        } catch (e) {
+          resolve({ error: e.message });
+        }
+      });
+    }).on('error', e => resolve({ error: e.message }));
+  });
+});
+
+// ── Self-update: download new launcher to Downloads folder, open it, quit ─────
+ipcMain.handle('self-update', async (_event, downloadUrl) => {
+  const dest = path.join(os.homedir(), 'Downloads', 'Modulon-Setup.exe');
+  try {
+    await download(downloadUrl, dest, (pct) => {
+      win?.webContents.send('update-dl-progress', pct);
+    });
+    shell.openPath(dest);
+    setTimeout(() => app.quit(), 1200);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+function semverGt(a, b) {
+  const pa = (a || '0').split('.').map(Number);
+  const pb = (b || '0').split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return true;
+    if ((pa[i] || 0) < (pb[i] || 0)) return false;
+  }
+  return false;
+}
 
 ipcMain.handle('browse-dir', async () => {
   const r = await dialog.showOpenDialog(win, {

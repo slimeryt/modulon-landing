@@ -2,6 +2,8 @@ import React from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import ModulonLanding from './ModulonLanding';
 import ChatPage from './ChatPage';
+import DesktopChatPage from './DesktopChatPage';
+import DesktopLoginPage from './DesktopLoginPage';
 import LoginPage from './LoginPage';
 import SignUpPage from './SignUpPage';
 import StatusPage from './StatusPage';
@@ -43,6 +45,15 @@ export default function App() {
             </RequireAuth>
           }
         />
+        <Route
+          path="/desktop"
+          element={
+            <RequireAuth>
+              <DesktopChatPage />
+            </RequireAuth>
+          }
+        />
+        <Route path="/desktop/login" element={<DesktopLoginPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/downloads" element={<DownloadsPage />} />

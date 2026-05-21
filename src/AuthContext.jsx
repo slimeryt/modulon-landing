@@ -4,6 +4,7 @@ import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   sendPasswordResetEmail,
+  signInWithCredential,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -55,6 +56,26 @@ export function AuthProvider({ children }) {
       setUser(u);
       setReady(true);
     });
+  }, []);
+
+  // Desktop (Electron): listen for the Google token that arrives via the
+  // modulon://auth?googleIdToken=... deep-link after the user signs in
+  // through the system browser's /desktop/login page.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.electronAPI?.onGoogleAuthCallback) return;
+    window.electronAPI.onGoogleAuthCallback(async ({ googleIdToken }) => {
+      try {
+        const auth = getFirebaseAuth();
+        if (!auth || !googleIdToken) return;
+        const credential = GoogleAuthProvider.credential(googleIdToken);
+        await signInWithCredential(auth, credential);
+        // onAuthStateChanged above will pick up the new user automatically.
+      } catch (err) {
+        console.error('[AuthContext] Google desktop sign-in error:', err);
+      }
+    });
+    // Registered once; no cleanup needed (ipcRenderer listener survives the lifetime
+    // of the renderer process, which is the same as the app window).
   }, []);
 
   const value = useMemo(

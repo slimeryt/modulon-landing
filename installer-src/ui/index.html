@@ -230,7 +230,19 @@ html,body{
 }
 .set-btn:hover{background:#131313;color:#666;border-color:#252525}
 .set-btn.danger:hover{background:#180808;color:#c04040;border-color:#3a1010}
+.set-btn:disabled{opacity:.4;cursor:not-allowed}
 .settings-note{font-size:10.5px;color:#1e1e1e;line-height:1.7;margin-top:6px}
+.set-section-label{font-size:10px;color:#242424;letter-spacing:.08em;text-transform:uppercase;
+  margin-top:6px;margin-bottom:2px;padding-left:4px}
+/* update status inside a set-row */
+.upd-status{font-size:11px;color:#333;display:flex;align-items:center;gap:7px}
+.upd-status.ok{color:#3d7a3d}
+.upd-status.avail{color:#7a7030}
+.upd-status.err{color:#7a3030}
+.upd-prog{margin-top:8px}
+.upd-prog .prog-track{height:2px}
+.upd-prog .prog-meta{font-size:10px;color:#2a2a2a;margin-bottom:5px;
+  display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
 
 /* ── INSTALL FLOW ───────────────────────────────────────────────────────── */
 .flow-title{font-size:20px;font-weight:600;letter-spacing:-.025em;margin-bottom:6px}
@@ -523,6 +535,32 @@ html,body{
           </div>
           <button class="set-btn danger" onclick="runUninstall()">Uninstall</button>
         </div>
+
+        <div class="set-section-label">Launcher Updates</div>
+
+        <div class="set-row">
+          <div class="set-left">
+            <div class="set-label">Launcher Version</div>
+            <div class="set-value" id="set-launcher-ver">v0.1.0</div>
+          </div>
+          <button class="set-btn" id="btn-check-update" onclick="checkLauncherUpdate()">Check for Updates</button>
+        </div>
+
+        <!-- Update status / progress (hidden until check runs) -->
+        <div id="upd-area" style="display:none">
+          <div class="set-row" style="flex-direction:column;align-items:flex-start;gap:10px">
+            <div class="upd-status" id="upd-status-msg"></div>
+            <div class="upd-prog" id="upd-prog-area" style="display:none;width:100%">
+              <div class="prog-meta">
+                <span id="upd-prog-label">Downloading update...</span>
+                <span id="upd-prog-pct">0%</span>
+              </div>
+              <div class="prog-track"><div class="prog-fill" id="upd-prog-fill"></div></div>
+            </div>
+            <button class="set-btn" id="btn-dl-update" style="display:none"
+                    onclick="downloadLauncherUpdate()">Download &amp; Install</button>
+          </div>
+        </div>
       </div>
       <p class="settings-note">Reinstalling overwrites existing files without removing user data.</p>
     </div>
@@ -608,7 +646,9 @@ html,body{
 'use strict';
 let installDir = '';
 let isInstalled = false;
+let isInstalling = false;
 let launchMode = 'normal'; // 'normal' | 'update'
+let launcherUpdateUrl = null;
 
 const VIEWS = {
   home:       { el:'v-home',       nav:'nb-home'    },
@@ -627,12 +667,21 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   const d = await window.setup.getDefaults();
   installDir = d.installDir;
-  document.getElementById('dir-inp').value  = installDir;
-  document.getElementById('ic-path').textContent  = installDir;
-  document.getElementById('set-path').textContent = installDir;
+  document.getElementById('dir-inp').value         = installDir;
+  document.getElementById('ic-path').textContent   = installDir;
+  document.getElementById('set-path').textContent  = installDir;
+  document.getElementById('set-launcher-ver').textContent = 'v' + (d.launcherVersion || '0.1.0');
 
   isInstalled = await window.setup.checkInstalled();
   updateHomeState();
+
+  window.setup.onUpdateProgress((pct) => {
+    document.getElementById('upd-prog-fill').style.width  = pct + '%';
+    document.getElementById('upd-prog-pct').textContent   = pct + '%';
+    if (pct >= 100) {
+      document.getElementById('upd-prog-label').textContent = 'Launching installer...';
+    }
+  });
 
   window.setup.onProgress(({ phase, percent }) => {
     document.getElementById('prog-phase').textContent = phase;
@@ -669,6 +718,11 @@ document.addEventListener('click', () => {
 });
 
 function showView(name) {
+  // If install is in progress, redirect any attempt to show the location
+  // screen back to the installing screen so the user sees live progress.
+  if (isInstalling && (name === 'install' || name === 'location')) {
+    name = 'installing';
+  }
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.s-nav-btn').forEach(b => b.classList.remove('active'));
   const cfg = VIEWS[name];
@@ -721,12 +775,14 @@ async function browseDir() {
 async function startInstall() {
   const desktopShortcut = document.getElementById('cb-desk').checked;
   const startMenu       = document.getElementById('cb-start').checked;
+  isInstalling = true;
   document.getElementById('btn-install').disabled = true;
   setInstallStep(0);
   showView('installing');
 
   const result = await window.setup.install({ installDir, desktopShortcut, startMenu });
 
+  isInstalling = false;
   document.getElementById('btn-install').disabled = false;
   if (result.ok) {
     isInstalled = true;
@@ -749,6 +805,62 @@ function finish() {
   if (document.getElementById('cb-launch').checked)
     window.setup.launch(installDir + '\\Modulon.exe');
   else window.setup.close();
+}
+
+async function checkLauncherUpdate() {
+  const btn = document.getElementById('btn-check-update');
+  const area = document.getElementById('upd-area');
+  const msg  = document.getElementById('upd-status-msg');
+
+  btn.disabled = true;
+  btn.textContent = 'Checking...';
+  area.style.display = 'block';
+  msg.className = 'upd-status';
+  msg.textContent = 'Checking for updates…';
+  document.getElementById('btn-dl-update').style.display   = 'none';
+  document.getElementById('upd-prog-area').style.display   = 'none';
+
+  const res = await window.setup.checkLauncherUpdate();
+  btn.disabled = false;
+  btn.textContent = 'Check for Updates';
+
+  if (res.error) {
+    msg.className   = 'upd-status err';
+    msg.textContent = 'Error: ' + res.error;
+    return;
+  }
+  if (res.hasUpdate) {
+    launcherUpdateUrl = res.downloadUrl;
+    msg.className   = 'upd-status avail';
+    msg.textContent = 'Update available — v' + res.latest;
+    document.getElementById('btn-dl-update').style.display = '';
+  } else {
+    msg.className   = 'upd-status ok';
+    msg.textContent = "You're up to date.";
+  }
+}
+
+async function downloadLauncherUpdate() {
+  if (!launcherUpdateUrl) return;
+  const btn      = document.getElementById('btn-dl-update');
+  const progArea = document.getElementById('upd-prog-area');
+  const msg      = document.getElementById('upd-status-msg');
+
+  btn.disabled    = true;
+  btn.textContent = 'Downloading…';
+  progArea.style.display = 'block';
+  document.getElementById('upd-prog-fill').style.width = '0%';
+  document.getElementById('upd-prog-pct').textContent  = '0%';
+  document.getElementById('upd-prog-label').textContent = 'Downloading update...';
+
+  const res = await window.setup.selfUpdate(launcherUpdateUrl);
+  if (!res.ok) {
+    msg.className   = 'upd-status err';
+    msg.textContent = 'Download failed: ' + res.error;
+    btn.disabled    = false;
+    btn.textContent = 'Retry';
+  }
+  // on success the main process opens the new exe and quits — nothing more needed here
 }
 
 function appendLog(msg) {
