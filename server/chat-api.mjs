@@ -23,7 +23,7 @@ import fs        from 'fs';
 import path      from 'path';
 import { fileURLToPath } from 'url';
 import dotenv    from 'dotenv';
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import https from 'https';
 
 dotenv.config();
 
@@ -89,29 +89,43 @@ if (SERVE_SPA) {
   }
 }
 
-// ── Firebase JWT verification ─────────────────────────────────────────────────
-const FIREBASE_PROJECT_ID = process.env.VITE_FIREBASE_PROJECT_ID || '';
-const FIREBASE_CONFIGURED = !!FIREBASE_PROJECT_ID;
+// ── Firebase token verification (via Identity Toolkit REST API) ───────────────
+const FIREBASE_API_KEY     = process.env.VITE_FIREBASE_API_KEY     || '';
+const FIREBASE_PROJECT_ID  = process.env.VITE_FIREBASE_PROJECT_ID  || '';
+const FIREBASE_CONFIGURED  = !!(FIREBASE_API_KEY && FIREBASE_PROJECT_ID);
 
-let FIREBASE_JWKS = null;
-if (FIREBASE_CONFIGURED) {
-  FIREBASE_JWKS = createRemoteJWKSet(
-    new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com')
-  );
-}
+// In-process cache: token string → { uid, expiresAt }
+const _tokenCache = new Map();
 
-/** Verifies a Firebase ID token and returns the Firebase UID, or null on failure. */
-async function verifyFirebaseToken(token) {
-  if (!FIREBASE_JWKS || !FIREBASE_PROJECT_ID) return null;
-  try {
-    const { payload } = await jwtVerify(token, FIREBASE_JWKS, {
-      issuer:   `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`,
-      audience: FIREBASE_PROJECT_ID,
+/** Verifies a Firebase ID token via Google's Identity Toolkit and returns the UID. */
+function verifyFirebaseToken(idToken) {
+  const cached = _tokenCache.get(idToken);
+  if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.uid);
+
+  return new Promise((resolve) => {
+    const body = JSON.stringify({ idToken });
+    const options = {
+      hostname: 'identitytoolkit.googleapis.com',
+      path:     `/v1/accounts:lookup?key=${FIREBASE_API_KEY}`,
+      method:   'POST',
+      headers:  { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+    };
+    const req = https.request(options, (res) => {
+      let raw = '';
+      res.on('data', (c) => { raw += c; });
+      res.on('end', () => {
+        try {
+          const data = JSON.parse(raw);
+          const uid  = data.users?.[0]?.localId ?? null;
+          if (uid) _tokenCache.set(idToken, { uid, expiresAt: Date.now() + 5 * 60 * 1000 });
+          resolve(uid);
+        } catch { resolve(null); }
+      });
     });
-    return payload.sub ?? null;
-  } catch {
-    return null;
-  }
+    req.on('error', () => resolve(null));
+    req.write(body);
+    req.end();
+  });
 }
 
 /** Extracts the Bearer token from the Authorization header and verifies it. */
