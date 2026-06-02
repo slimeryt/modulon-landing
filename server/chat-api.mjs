@@ -173,7 +173,7 @@ try { db.exec(`ALTER TABLE conversations ADD COLUMN user_id TEXT`); } catch {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_convos_user ON conversations(user_id)`); } catch {}
 
 const q = {
-  listConvos:   db.prepare(`SELECT id,title,created_at,updated_at FROM conversations WHERE user_id=? ORDER BY updated_at DESC LIMIT 100`),
+  listConvos:   db.prepare(`SELECT id,title,created_at,updated_at FROM conversations WHERE user_id IS ? ORDER BY updated_at DESC LIMIT 100`),
   getConvo:     db.prepare(`SELECT id,user_id FROM conversations WHERE id=?`),
   insertConvo:  db.prepare(`INSERT INTO conversations (id,title,user_id) VALUES (?,?,?)`),
   deleteConvo:  db.prepare(`DELETE FROM conversations WHERE id=?`),
@@ -258,7 +258,7 @@ app.get('/api/health', (_req, res) => {
 app.get('/api/chat/conversations', async (req, res) => {
   const uid = await extractUserId(req);
   if (FIREBASE_CONFIGURED && !uid) return res.status(401).json({ error: 'Unauthorized' });
-  res.json({ conversations: q.listConvos.all(uid ?? '') });
+  res.json({ conversations: q.listConvos.all(uid ?? null) });
 });
 
 app.post('/api/chat/conversations', async (req, res) => {
