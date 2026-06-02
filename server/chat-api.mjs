@@ -23,6 +23,7 @@ import fs        from 'fs';
 import path      from 'path';
 import { fileURLToPath } from 'url';
 import dotenv    from 'dotenv';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 dotenv.config();
 
@@ -88,6 +89,38 @@ if (SERVE_SPA) {
   }
 }
 
+// ── Firebase JWT verification ─────────────────────────────────────────────────
+const FIREBASE_PROJECT_ID = process.env.VITE_FIREBASE_PROJECT_ID || '';
+const FIREBASE_CONFIGURED = !!FIREBASE_PROJECT_ID;
+
+let FIREBASE_JWKS = null;
+if (FIREBASE_CONFIGURED) {
+  FIREBASE_JWKS = createRemoteJWKSet(
+    new URL('https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com')
+  );
+}
+
+/** Verifies a Firebase ID token and returns the Firebase UID, or null on failure. */
+async function verifyFirebaseToken(token) {
+  if (!FIREBASE_JWKS || !FIREBASE_PROJECT_ID) return null;
+  try {
+    const { payload } = await jwtVerify(token, FIREBASE_JWKS, {
+      issuer:   `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`,
+      audience: FIREBASE_PROJECT_ID,
+    });
+    return payload.sub ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Extracts the Bearer token from the Authorization header and verifies it. */
+async function extractUserId(req) {
+  const auth = req.headers['authorization'] ?? '';
+  if (!auth.startsWith('Bearer ')) return null;
+  return verifyFirebaseToken(auth.slice(7));
+}
+
 // ── Express ───────────────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json());
@@ -121,9 +154,14 @@ db.exec(`
   );
 `);
 
+// Migration: add user_id to existing databases
+try { db.exec(`ALTER TABLE conversations ADD COLUMN user_id TEXT`); } catch {}
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_convos_user ON conversations(user_id)`); } catch {}
+
 const q = {
-  listConvos:   db.prepare(`SELECT id,title,created_at,updated_at FROM conversations ORDER BY updated_at DESC LIMIT 100`),
-  insertConvo:  db.prepare(`INSERT INTO conversations (id,title) VALUES (?,?)`),
+  listConvos:   db.prepare(`SELECT id,title,created_at,updated_at FROM conversations WHERE user_id=? ORDER BY updated_at DESC LIMIT 100`),
+  getConvo:     db.prepare(`SELECT id,user_id FROM conversations WHERE id=?`),
+  insertConvo:  db.prepare(`INSERT INTO conversations (id,title,user_id) VALUES (?,?,?)`),
   deleteConvo:  db.prepare(`DELETE FROM conversations WHERE id=?`),
   listMessages: db.prepare(`SELECT id,role,body,prototype,created_at FROM messages WHERE conversation_id=? ORDER BY created_at ASC`),
   insertMsg:    db.prepare(`INSERT INTO messages (id,conversation_id,role,body,prototype) VALUES (?,?,?,?,?)`),
@@ -203,33 +241,56 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, modelReady: pythonReady });
 });
 
-app.get('/api/chat/conversations', (_req, res) => {
-  res.json({ conversations: q.listConvos.all() });
+app.get('/api/chat/conversations', async (req, res) => {
+  const uid = await extractUserId(req);
+  if (FIREBASE_CONFIGURED && !uid) return res.status(401).json({ error: 'Unauthorized' });
+  res.json({ conversations: q.listConvos.all(uid ?? '') });
 });
 
-app.post('/api/chat/conversations', (_req, res) => {
+app.post('/api/chat/conversations', async (req, res) => {
+  const uid = await extractUserId(req);
+  if (FIREBASE_CONFIGURED && !uid) return res.status(401).json({ error: 'Unauthorized' });
   const id = crypto.randomUUID();
-  q.insertConvo.run(id, 'New Chat');
+  q.insertConvo.run(id, 'New Chat', uid ?? null);
   res.json({ id });
 });
 
-app.get('/api/chat/conversations/:id/messages', (req, res) => {
+app.get('/api/chat/conversations/:id/messages', async (req, res) => {
+  const uid = await extractUserId(req);
+  if (FIREBASE_CONFIGURED && !uid) return res.status(401).json({ error: 'Unauthorized' });
+  const convo = q.getConvo.get(req.params.id);
+  if (!convo) return res.status(404).json({ error: 'Not found' });
+  if (FIREBASE_CONFIGURED && uid && convo.user_id && convo.user_id !== uid)
+    return res.status(403).json({ error: 'Forbidden' });
   res.json({ messages: q.listMessages.all(req.params.id) });
 });
 
-app.delete('/api/chat/conversations/:id', (req, res) => {
+app.delete('/api/chat/conversations/:id', async (req, res) => {
+  const uid = await extractUserId(req);
+  if (FIREBASE_CONFIGURED && !uid) return res.status(401).json({ error: 'Unauthorized' });
+  const convo = q.getConvo.get(req.params.id);
+  if (convo && FIREBASE_CONFIGURED && uid && convo.user_id && convo.user_id !== uid)
+    return res.status(403).json({ error: 'Forbidden' });
   q.deleteConvo.run(req.params.id);
   res.json({ ok: true });
 });
 
 app.post('/api/chat', async (req, res) => {
+  const uid = await extractUserId(req);
+  if (FIREBASE_CONFIGURED && !uid) return res.status(401).json({ error: 'Unauthorized' });
+
   const { message, conversationId } = req.body ?? {};
   if (!message?.trim()) return res.status(400).json({ error: 'Empty message' });
 
   let convId = conversationId;
   if (!convId) {
     convId = crypto.randomUUID();
-    q.insertConvo.run(convId, message.slice(0, 60));
+    q.insertConvo.run(convId, message.slice(0, 60), uid ?? null);
+  } else {
+    // Verify the conversation belongs to this user
+    const convo = q.getConvo.get(convId);
+    if (convo && FIREBASE_CONFIGURED && uid && convo.user_id && convo.user_id !== uid)
+      return res.status(403).json({ error: 'Forbidden' });
   }
 
   q.insertMsg.run(crypto.randomUUID(), convId, 'user', message, 0);

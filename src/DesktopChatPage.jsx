@@ -137,8 +137,9 @@ function UsageProgressBar({ label, current, cap, period, className = '' }) {
 function accountDisplayName(user) { if(!user)return'Guest'; return user.displayName?.trim()||user.email?.split('@')[0]||'User'; }
 function accountInitials(user)    { const n=accountDisplayName(user); const p=n.split(/[\s._-]+/).filter(Boolean); return p.length>=2?`${p[0][0]}${p[1][0]}`.toUpperCase():n.slice(0,2).toUpperCase(); }
 
-async function apiJson(path, opts = {}) {
+async function apiJson(path, opts = {}, token = null) {
   const headers = { ...(opts.headers || {}) };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
     opts = { ...opts, body: JSON.stringify(opts.body) };
@@ -192,20 +193,26 @@ export default function DesktopChatPage() {
   const modelSelectMenuRef = useRef(null);
 
   // ── Data ──────────────────────────────────────────────────────────────────
+  // Wraps apiJson with the current user's Firebase ID token
+  const callApi = useCallback(async (path, opts = {}) => {
+    const token = user ? await user.getIdToken() : null;
+    return apiJson(path, opts, token);
+  }, [user]);
+
   const refreshConversations = useCallback(async () => {
     setLoadingList(true);
-    try { const d=await apiJson('/chat/conversations'); const l=d.conversations||[]; setConversations(l); return l; }
+    try { const d=await callApi('/chat/conversations'); const l=d.conversations||[]; setConversations(l); return l; }
     catch { setConversations([]); return []; }
     finally { setLoadingList(false); }
-  }, []);
+  }, [callApi]);
 
   const loadMessages = useCallback(async (id) => {
     if (!id) { setMessages([]); return; }
     setLoadingMessages(true);
-    try { const d=await apiJson(`/chat/conversations/${id}/messages`); setMessages(mapRowsToMessages(d.messages)); }
+    try { const d=await callApi(`/chat/conversations/${id}/messages`); setMessages(mapRowsToMessages(d.messages)); }
     catch (e) { setErr(e.message||String(e)); setMessages([]); }
     finally { setLoadingMessages(false); }
-  }, []);
+  }, [callApi]);
 
   const goHome = useCallback(() => {
     setErr(''); setConversationId(null); setMessages([]); setInput('');
@@ -391,7 +398,7 @@ export default function DesktopChatPage() {
 
   const deleteConversation = async (id, e) => {
     e?.stopPropagation(); if(!id)return; setErr('');
-    try { await apiJson(`/chat/conversations/${id}`,{method:'DELETE'}); await refreshConversations(); if(conversationId===id){setConversationId(null);setMessages([]);} }
+    try { await callApi(`/chat/conversations/${id}`,{method:'DELETE'}); await refreshConversations(); if(conversationId===id){setConversationId(null);setMessages([]);} }
     catch(ex){ setErr(ex.message||String(ex)); }
   };
 
@@ -402,7 +409,7 @@ export default function DesktopChatPage() {
     const opt={id:`tmp-${Date.now()}`,role:'user',text,prototype:false};
     setMessages(m=>[...m,opt]); setSending(true);
     try {
-      const data=await apiJson('/chat',{method:'POST',body:{message:text,conversationId}});
+      const data=await callApi('/chat',{method:'POST',body:{message:text,conversationId}});
       const cid=data.conversationId;
       if(cid)setConversationId(cid);
       await refreshConversations();
@@ -418,7 +425,7 @@ export default function DesktopChatPage() {
   const copySelectionFromMenu  = useCallback(async()=>{ const txt=window.getSelection?.()?.toString().trim(); if(txt)try{await navigator.clipboard.writeText(txt);}catch{} closeContextMenu(); }, [closeContextMenu]);
   const openConvoFromMenu      = useCallback(()=>{ if(!contextMenu?.conversationId)return; setErr(''); setConversationId(contextMenu.conversationId); closeContextMenu(); }, [contextMenu, closeContextMenu]);
   const copyConvoTitleFromMenu = useCallback(async()=>{ if(!contextMenu?.conversationId)return; const c=conversations.find(x=>x.id===contextMenu.conversationId); if(c?.title)try{await navigator.clipboard.writeText(c.title);}catch{} closeContextMenu(); }, [contextMenu, conversations, closeContextMenu]);
-  const deleteConvoFromMenu    = useCallback(async()=>{ const id=contextMenu?.conversationId; if(!id)return; setErr(''); try{await apiJson(`/chat/conversations/${id}`,{method:'DELETE'});await refreshConversations();if(conversationId===id){setConversationId(null);setMessages([]);}}catch(ex){setErr(ex.message||String(ex));} closeContextMenu(); }, [contextMenu, conversationId, refreshConversations, closeContextMenu]);
+  const deleteConvoFromMenu    = useCallback(async()=>{ const id=contextMenu?.conversationId; if(!id)return; setErr(''); try{await callApi(`/chat/conversations/${id}`,{method:'DELETE'});await refreshConversations();if(conversationId===id){setConversationId(null);setMessages([]);}}catch(ex){setErr(ex.message||String(ex));} closeContextMenu(); }, [contextMenu, conversationId, refreshConversations, closeContextMenu, callApi]);
   const openSettingsFromMenu   = useCallback(()=>{ setSettingsNotice(''); setSettingsSection('appearance'); setSettingsOpen(true); closeContextMenu(); }, [closeContextMenu]);
 
   const isHome = !conversationId && apiOk !== false;

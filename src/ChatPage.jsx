@@ -291,8 +291,9 @@ function accountInitials(user) {
   return n.slice(0, 2).toUpperCase();
 }
 
-async function apiJson(path, opts = {}) {
+async function apiJson(path, opts = {}, token = null) {
   const headers = { ...(opts.headers || {}) };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
     opts = { ...opts, body: JSON.stringify(opts.body) };
@@ -354,10 +355,16 @@ export default function ChatPage() {
   const [extraUsage, setExtraUsage] = useState(() => readExtraUsage());
   const [extraUsageCredits, setExtraUsageCredits] = useState(() => readExtraUsageCredits());
 
+  // Wraps apiJson with the current user's Firebase ID token
+  const callApi = useCallback(async (path, opts = {}) => {
+    const token = user ? await user.getIdToken() : null;
+    return apiJson(path, opts, token);
+  }, [user]);
+
   const refreshConversations = useCallback(async () => {
     setLoadingList(true);
     try {
-      const d = await apiJson('/chat/conversations');
+      const d = await callApi('/chat/conversations');
       const list = d.conversations || [];
       setConversations(list);
       return list;
@@ -367,7 +374,7 @@ export default function ChatPage() {
     } finally {
       setLoadingList(false);
     }
-  }, []);
+  }, [callApi]);
 
   const loadMessages = useCallback(async (id) => {
     if (!id) {
@@ -376,7 +383,7 @@ export default function ChatPage() {
     }
     setLoadingMessages(true);
     try {
-      const d = await apiJson(`/chat/conversations/${id}/messages`);
+      const d = await callApi(`/chat/conversations/${id}/messages`);
       setMessages(mapRowsToMessages(d.messages));
     } catch (e) {
       setErr(e.message || String(e));
@@ -384,7 +391,7 @@ export default function ChatPage() {
     } finally {
       setLoadingMessages(false);
     }
-  }, []);
+  }, [callApi]);
 
   /** ChatGPT-style fresh screen — no active thread until the user sends or picks one. */
   const goHome = useCallback(() => {
@@ -661,7 +668,7 @@ export default function ChatPage() {
     if (!id) return;
     setErr('');
     try {
-      await apiJson(`/chat/conversations/${id}`, { method: 'DELETE' });
+      await callApi(`/chat/conversations/${id}`, { method: 'DELETE' });
       await refreshConversations();
       if (conversationId === id) {
         setConversationId(null);
@@ -671,7 +678,7 @@ export default function ChatPage() {
       setErr(errDel.message || String(errDel));
     }
     closeContextMenu();
-  }, [contextMenu, conversationId, refreshConversations, closeContextMenu]);
+  }, [contextMenu, conversationId, refreshConversations, closeContextMenu, callApi]);
 
   const openSettingsFromMenu = useCallback(() => {
     setSettingsNotice('');
@@ -750,7 +757,7 @@ export default function ChatPage() {
     if (!id) return;
     setErr('');
     try {
-      await apiJson(`/chat/conversations/${id}`, { method: 'DELETE' });
+      await callApi(`/chat/conversations/${id}`, { method: 'DELETE' });
       await refreshConversations();
       if (conversationId === id) {
         setConversationId(null);
@@ -775,7 +782,7 @@ export default function ChatPage() {
     setMessages((m) => [...m, optimisticUser]);
     setSending(true);
     try {
-      const data = await apiJson('/chat', {
+      const data = await callApi('/chat', {
         method: 'POST',
         body: { message: text, conversationId },
       });
