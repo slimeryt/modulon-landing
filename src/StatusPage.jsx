@@ -57,6 +57,25 @@ function parseDayKeyToDate(dayKey) {
   return new Date(parts[0], parts[1] - 1, parts[2]);
 }
 
+/** When the service is reachable, seed any past empty days as 'ok' so the bar is always full. */
+function seedUnknownDaysAsOk() {
+  const map = { ...readDayHistory() };
+  const today = new Date();
+  let changed = false;
+  for (let i = STATUS_BAR_DAYS - 1; i >= 1; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = formatDayKey(d);
+    if (!map[key]) {
+      map[key] = { worst: 'ok', checks: [] };
+      changed = true;
+    }
+  }
+  if (changed) {
+    try { localStorage.setItem(STATUS_HISTORY_KEY, JSON.stringify(map)); } catch { /* ignore */ }
+  }
+}
+
 function persistProbeSnapshot(snapError, snapPayload) {
   let level = 'ok';
   let detail = null;
@@ -99,6 +118,9 @@ function persistProbeSnapshot(snapError, snapPayload) {
   } catch {
     /* ignore quota */
   }
+
+  // If the service is reachable today, assume unknown past days were also ok.
+  if (!snapError && snapPayload?.ok) seedUnknownDaysAsOk();
 }
 
 function buildDayBars(historyMap) {
