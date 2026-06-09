@@ -90,11 +90,33 @@ const EXTRA_USAGE_KEY = 'modulon-extra-usage';
 const EXTRA_USAGE_CREDITS_KEY = 'modulon-extra-usage-credits';
 const API_KEYS_STORAGE_KEY = 'modulon-api-keys';
 
-/** Soft caps for progress UI (local counts; not enforced by the server). */
-const DAILY_MESSAGE_CAP = 120;
-const DAILY_MESSAGE_CAP_EXTRA = 200;
-const WEEKLY_MESSAGE_CAP = DAILY_MESSAGE_CAP * 7;
-const WEEKLY_MESSAGE_CAP_EXTRA = DAILY_MESSAGE_CAP_EXTRA * 7;
+/** Daily API spend caps in USD (soft, local only — not enforced by the server). */
+const DAILY_COST_CAP        = 5.00;
+const DAILY_COST_CAP_EXTRA  = 10.00;
+const WEEKLY_COST_CAP       = DAILY_COST_CAP * 7;
+const WEEKLY_COST_CAP_EXTRA = DAILY_COST_CAP_EXTRA * 7;
+
+/** Per-model pricing in USD per 1M tokens (input / output). */
+const MODEL_PRICING = {
+  'claude-opus-4-5':   { input: 15.00, output: 75.00 },
+  'claude-sonnet-4-5': { input:  3.00, output: 15.00 },
+  'claude-haiku-4-5':  { input:  0.80, output:  4.00 },
+  'gpt-4o':            { input:  2.50, output: 10.00 },
+  'gpt-4o-mini':       { input:  0.15, output:  0.60 },
+  'o3-mini':           { input:  1.10, output:  4.40 },
+  'grok-3':            { input:  3.00, output: 15.00 },
+  'grok-3-mini':       { input:  0.30, output:  0.50 },
+  'deepseek-chat':     { input:  0.27, output:  1.10 },
+  'deepseek-reasoner': { input:  0.55, output:  2.19 },
+  'gemini-2.0-flash':  { input:  0.075,output:  0.30 },
+  'gemini-1.5-pro':    { input:  1.25, output:  5.00 },
+};
+
+function calcCost(modelId, inputTokens, outputTokens) {
+  const p = MODEL_PRICING[modelId];
+  if (!p) return 0;
+  return (inputTokens * p.input + outputTokens * p.output) / 1_000_000;
+}
 
 /** ISO 3166 region → ISO 4217 currency for display (best-effort from browser locale). */
 const REGION_TO_CURRENCY = {
@@ -200,12 +222,12 @@ function readDailyUsage() {
   const day = todayLocalISO();
   try {
     const raw = localStorage.getItem(DAILY_USAGE_KEY);
-    if (!raw) return { day, messages: 0 };
+    if (!raw) return { day, cost: 0 };
     const o = JSON.parse(raw);
-    if (o.day !== day) return { day, messages: 0 };
-    return { day, messages: Number(o.messages) || 0 };
+    if (o.day !== day) return { day, cost: 0 };
+    return { day, cost: Number(o.cost) || 0 };
   } catch {
-    return { day, messages: 0 };
+    return { day, cost: 0 };
   }
 }
 
@@ -221,12 +243,12 @@ function readWeeklyUsage() {
   const weekStart = mondayLocalISO();
   try {
     const raw = localStorage.getItem(WEEKLY_USAGE_KEY);
-    if (!raw) return { weekStart, messages: 0 };
+    if (!raw) return { weekStart, cost: 0 };
     const o = JSON.parse(raw);
-    if (o.weekStart !== weekStart) return { weekStart, messages: 0 };
-    return { weekStart, messages: Number(o.messages) || 0 };
+    if (o.weekStart !== weekStart) return { weekStart, cost: 0 };
+    return { weekStart, cost: Number(o.cost) || 0 };
   } catch {
-    return { weekStart, messages: 0 };
+    return { weekStart, cost: 0 };
   }
 }
 
@@ -236,6 +258,12 @@ function writeWeeklyUsage(u) {
   } catch {
     /* ignore */
   }
+}
+
+function formatCost(n) {
+  if (n === 0) return '$0.00';
+  if (n < 0.01) return `$${n.toFixed(4)}`;
+  return `$${n.toFixed(2)}`;
 }
 
 function readExtraUsage() {
@@ -303,8 +331,6 @@ function UsageProgressBar({ label, current, cap, period, className = '' }) {
   const over = current > cap;
   const fillWidth = Math.min(100, ratio * 100);
   const remaining = Math.max(0, cap - current);
-  const usedPct = Math.round(ratio * 100);
-  const remainingPct = cap > 0 && !over ? Math.round((remaining / cap) * 100) : 0;
   const fillGradient = over ? USAGE_BAR_OVER : USAGE_BAR_MESSAGES;
   const guideWord = period === 'weekly' ? 'weekly' : 'daily';
 
@@ -316,9 +342,9 @@ function UsageProgressBar({ label, current, cap, period, className = '' }) {
         </div>
         <div className="shrink-0 text-right">
           <span className="font-mono text-base font-bold tabular-nums tracking-tight text-zinc-900 dark:text-white">
-            {usedPct}%
+            {formatCost(current)}
           </span>
-          <span className="block text-xs font-medium text-zinc-400 dark:text-white/35">of {guideWord} guide</span>
+          <span className="block text-xs font-medium text-zinc-400 dark:text-white/35">/ {formatCost(cap)} budget</span>
         </div>
       </div>
       <div className="relative">
@@ -336,8 +362,8 @@ function UsageProgressBar({ label, current, cap, period, className = '' }) {
       <div className="text-[10px] font-medium uppercase tracking-widest text-zinc-500 dark:text-white/35">
         <span className={over ? 'text-amber-700 dark:text-amber-300/90' : ''}>
           {over
-            ? `Past ${guideWord} guide (${usedPct}% used)`
-            : `${remainingPct}% of guide still available`}
+            ? `Over ${guideWord} budget — ${formatCost(current - cap)} over limit`
+            : `${formatCost(remaining)} remaining`}
         </span>
       </div>
     </div>
@@ -400,7 +426,11 @@ async function callProviderApi(provider, modelId, apiKey, priorMessages, newText
     });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e?.error?.message || `${provider} error ${res.status}`); }
     const d = await res.json();
-    return d.choices?.[0]?.message?.content ?? '';
+    return {
+      text: d.choices?.[0]?.message?.content ?? '',
+      inputTokens: d.usage?.prompt_tokens ?? 0,
+      outputTokens: d.usage?.completion_tokens ?? 0,
+    };
   }
 
   if (provider === 'anthropic') {
@@ -416,7 +446,11 @@ async function callProviderApi(provider, modelId, apiKey, priorMessages, newText
     });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e?.error?.message || `Anthropic error ${res.status}`); }
     const d = await res.json();
-    return d.content?.[0]?.text ?? '';
+    return {
+      text: d.content?.[0]?.text ?? '',
+      inputTokens: d.usage?.input_tokens ?? 0,
+      outputTokens: d.usage?.output_tokens ?? 0,
+    };
   }
 
   if (provider === 'google') {
@@ -432,7 +466,11 @@ async function callProviderApi(provider, modelId, apiKey, priorMessages, newText
     });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e?.error?.message || `Google error ${res.status}`); }
     const d = await res.json();
-    return d.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    return {
+      text: d.candidates?.[0]?.content?.parts?.[0]?.text ?? '',
+      inputTokens: d.usageMetadata?.promptTokenCount ?? 0,
+      outputTokens: d.usageMetadata?.candidatesTokenCount ?? 0,
+    };
   }
 
   throw new Error(`Unknown provider: ${provider}`);
@@ -506,15 +544,18 @@ export default function ChatPage() {
   const loadMessages = useCallback(async (id) => {
     if (!id) {
       setMessages([]);
-      return;
+      return [];
     }
     setLoadingMessages(true);
     try {
       const d = await callApi(`/chat/conversations/${id}/messages`);
-      setMessages(mapRowsToMessages(d.messages));
+      const msgs = mapRowsToMessages(d.messages);
+      setMessages(msgs);
+      return msgs;
     } catch (e) {
       setErr(e.message || String(e));
       setMessages([]);
+      return [];
     } finally {
       setLoadingMessages(false);
     }
@@ -840,21 +881,21 @@ export default function ChatPage() {
     }
   }, [settingsOpen]);
 
-  const bumpWeeklyMessages = useCallback((n = 1) => {
+  const bumpWeeklyCost = useCallback((n) => {
     setWeeklyUsage((prev) => {
       const weekStart = mondayLocalISO();
-      const base = prev.weekStart === weekStart ? prev : { weekStart, messages: 0 };
-      const next = { weekStart, messages: base.messages + n };
+      const base = prev.weekStart === weekStart ? prev : { weekStart, cost: 0 };
+      const next = { weekStart, cost: base.cost + n };
       writeWeeklyUsage(next);
       return next;
     });
   }, []);
 
-  const bumpDailyMessages = useCallback((n = 1) => {
+  const bumpDailyCost = useCallback((n) => {
     setDailyUsage((prev) => {
       const day = todayLocalISO();
-      const base = prev.day === day ? prev : { day, messages: 0 };
-      const next = { day, messages: base.messages + n };
+      const base = prev.day === day ? prev : { day, cost: 0 };
+      const next = { day, cost: base.cost + n };
       writeDailyUsage(next);
       return next;
     });
@@ -913,28 +954,28 @@ export default function ChatPage() {
       if (selectedModel.provider !== 'modulon') {
         const apiKey = apiKeys[selectedModel.provider];
         if (!apiKey) throw new Error(`No API key saved for ${selectedModel.label}. Add one in Settings → API Keys.`);
-        const reply = await callProviderApi(selectedModel.provider, selectedModel.id, apiKey, messages, text);
+        const result = await callProviderApi(selectedModel.provider, selectedModel.id, apiKey, messages, text);
         setMessages((m) => [
           ...m.filter((x) => x.id !== optimisticUser.id),
           optimisticUser,
-          { id: `ai-${Date.now()}`, role: 'assistant', text: reply },
+          { id: `ai-${Date.now()}`, role: 'assistant', text: result.text },
         ]);
+        const inTok  = result.inputTokens  || Math.ceil(text.length / 4);
+        const outTok = result.outputTokens || Math.ceil(result.text.length / 4);
+        const cost = calcCost(selectedModel.id, inTok, outTok);
+        bumpDailyCost(cost);
+        bumpWeeklyCost(cost);
       } else {
         const data = await callApi('/chat', {
           method: 'POST',
           body: { message: text, conversationId },
         });
         const convId = data.conversationId;
-        if (convId) {
-          setConversationId(convId);
-        }
+        if (convId) setConversationId(convId);
         await refreshConversations();
-        if (convId) {
-          await loadMessages(convId);
-        }
+        if (convId) await loadMessages(convId);
+        // Modulon runs on your own server — no external API cost
       }
-      bumpDailyMessages(1);
-      bumpWeeklyMessages(1);
     } catch (e) {
       setErr(e.message || String(e));
       setMessages((m) => [
@@ -1705,9 +1746,9 @@ export default function ChatPage() {
                       </h3>
                       <UsageProgressBar
                         period="daily"
-                        label="Messages you send"
-                        current={dailyUsage.messages}
-                        cap={extraUsage ? DAILY_MESSAGE_CAP_EXTRA : DAILY_MESSAGE_CAP}
+                        label="API spend"
+                        current={dailyUsage.cost}
+                        cap={extraUsage ? DAILY_COST_CAP_EXTRA : DAILY_COST_CAP}
                       />
                     </section>
 
@@ -1719,9 +1760,9 @@ export default function ChatPage() {
                       </h3>
                       <UsageProgressBar
                         period="weekly"
-                        label="Messages you send"
-                        current={weeklyUsage.messages}
-                        cap={extraUsage ? WEEKLY_MESSAGE_CAP_EXTRA : WEEKLY_MESSAGE_CAP}
+                        label="API spend"
+                        current={weeklyUsage.cost}
+                        cap={extraUsage ? WEEKLY_COST_CAP_EXTRA : WEEKLY_COST_CAP}
                       />
                     </section>
 

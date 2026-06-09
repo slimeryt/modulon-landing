@@ -72,10 +72,26 @@ const EXTRA_USAGE_KEY          = 'modulon-extra-usage';
 const EXTRA_USAGE_CREDITS_KEY  = 'modulon-extra-usage-credits';
 const API_KEYS_STORAGE_KEY     = 'modulon-api-keys';
 
-const DAILY_MESSAGE_CAP        = 120;
-const DAILY_MESSAGE_CAP_EXTRA  = 200;
-const WEEKLY_MESSAGE_CAP       = DAILY_MESSAGE_CAP * 7;
-const WEEKLY_MESSAGE_CAP_EXTRA = DAILY_MESSAGE_CAP_EXTRA * 7;
+const DAILY_COST_CAP        = 5.00;
+const DAILY_COST_CAP_EXTRA  = 10.00;
+const WEEKLY_COST_CAP       = DAILY_COST_CAP * 7;
+const WEEKLY_COST_CAP_EXTRA = DAILY_COST_CAP_EXTRA * 7;
+
+const MODEL_PRICING={
+  'claude-opus-4-5':   {input:15.00,output:75.00},
+  'claude-sonnet-4-5': {input: 3.00,output:15.00},
+  'claude-haiku-4-5':  {input: 0.80,output: 4.00},
+  'gpt-4o':            {input: 2.50,output:10.00},
+  'gpt-4o-mini':       {input: 0.15,output: 0.60},
+  'o3-mini':           {input: 1.10,output: 4.40},
+  'grok-3':            {input: 3.00,output:15.00},
+  'grok-3-mini':       {input: 0.30,output: 0.50},
+  'deepseek-chat':     {input: 0.27,output: 1.10},
+  'deepseek-reasoner': {input: 0.55,output: 2.19},
+  'gemini-2.0-flash':  {input: 0.075,output:0.30},
+  'gemini-1.5-pro':    {input: 1.25,output: 5.00},
+};
+function calcCost(modelId,inputTokens,outputTokens){const p=MODEL_PRICING[modelId];if(!p)return 0;return(inputTokens*p.input+outputTokens*p.output)/1_000_000;}
 
 const REGION_TO_CURRENCY = {
   US:'USD',CA:'CAD',MX:'MXN',BR:'BRL',GB:'GBP',CH:'CHF',NO:'NOK',SE:'SEK',DK:'DKK',
@@ -119,10 +135,11 @@ function mondayLocalISO() {
   return `${mon.getFullYear()}-${String(mon.getMonth()+1).padStart(2,'0')}-${String(mon.getDate()).padStart(2,'0')}`;
 }
 
-function readDailyUsage()  { const day=todayLocalISO(); try { const o=JSON.parse(localStorage.getItem(DAILY_USAGE_KEY)||'null'); return o?.day===day?{day,messages:Number(o.messages)||0}:{day,messages:0}; } catch{return{day,messages:0};} }
+function readDailyUsage()  { const day=todayLocalISO(); try { const o=JSON.parse(localStorage.getItem(DAILY_USAGE_KEY)||'null'); return o?.day===day?{day,cost:Number(o.cost)||0}:{day,cost:0}; } catch{return{day,cost:0};} }
 function writeDailyUsage(u){ try{localStorage.setItem(DAILY_USAGE_KEY,JSON.stringify(u));}catch{} }
-function readWeeklyUsage() { const w=mondayLocalISO(); try { const o=JSON.parse(localStorage.getItem(WEEKLY_USAGE_KEY)||'null'); return o?.weekStart===w?{weekStart:w,messages:Number(o.messages)||0}:{weekStart:w,messages:0}; } catch{return{weekStart:w,messages:0};} }
+function readWeeklyUsage() { const w=mondayLocalISO(); try { const o=JSON.parse(localStorage.getItem(WEEKLY_USAGE_KEY)||'null'); return o?.weekStart===w?{weekStart:w,cost:Number(o.cost)||0}:{weekStart:w,cost:0}; } catch{return{weekStart:w,cost:0};} }
 function writeWeeklyUsage(u){ try{localStorage.setItem(WEEKLY_USAGE_KEY,JSON.stringify(u));}catch{} }
+function formatCost(n){ if(n===0)return'$0.00'; if(n<0.01)return`$${n.toFixed(4)}`; return`$${n.toFixed(2)}`; }
 function readExtraUsage()  { try{return localStorage.getItem(EXTRA_USAGE_KEY)==='1';}catch{return false;} }
 function writeExtraUsage(v){ try{localStorage.setItem(EXTRA_USAGE_KEY,v?'1':'0');}catch{} }
 function readExtraUsageCredits(){ try{const r=localStorage.getItem(EXTRA_USAGE_CREDITS_KEY);const n=Number(r);return Number.isFinite(n)?Math.max(0,n):0;}catch{return 0;} }
@@ -136,21 +153,19 @@ const USAGE_BAR_MESSAGES = 'from-cyan-500 via-sky-500 to-indigo-500 shadow-[0_0_
 const USAGE_BAR_OVER     = 'from-amber-500 via-orange-500 to-rose-500 shadow-[0_0_24px_-4px_rgba(251,146,60,0.55)]';
 
 function UsageProgressBar({ label, current, cap, period, className = '' }) {
-  const ratio      = cap > 0 ? current / cap : 0;
-  const over       = current > cap;
-  const fillWidth  = Math.min(100, ratio * 100);
-  const remaining  = Math.max(0, cap - current);
-  const usedPct    = Math.round(ratio * 100);
-  const remPct     = cap > 0 && !over ? Math.round((remaining/cap)*100) : 0;
-  const fillGrad   = over ? USAGE_BAR_OVER : USAGE_BAR_MESSAGES;
-  const guide      = period === 'weekly' ? 'weekly' : 'daily';
+  const ratio     = cap > 0 ? current / cap : 0;
+  const over      = current > cap;
+  const fillWidth = Math.min(100, ratio * 100);
+  const remaining = Math.max(0, cap - current);
+  const fillGrad  = over ? USAGE_BAR_OVER : USAGE_BAR_MESSAGES;
+  const guide     = period === 'weekly' ? 'weekly' : 'daily';
   return (
     <div className={`space-y-2.5 ${className}`.trim()}>
       <div className="flex items-start justify-between gap-4">
         <p className="text-sm font-semibold text-zinc-900 dark:text-white/95">{label}</p>
         <div className="shrink-0 text-right">
-          <span className="font-mono text-base font-bold tabular-nums tracking-tight text-zinc-900 dark:text-white">{usedPct}%</span>
-          <span className="block text-xs font-medium text-zinc-400 dark:text-white/35">of {guide} guide</span>
+          <span className="font-mono text-base font-bold tabular-nums tracking-tight text-zinc-900 dark:text-white">{formatCost(current)}</span>
+          <span className="block text-xs font-medium text-zinc-400 dark:text-white/35">/ {formatCost(cap)} budget</span>
         </div>
       </div>
       <div className="relative">
@@ -161,7 +176,7 @@ function UsageProgressBar({ label, current, cap, period, className = '' }) {
       </div>
       <div className="text-[10px] font-medium uppercase tracking-widest text-zinc-500 dark:text-white/35">
         <span className={over?'text-amber-700 dark:text-amber-300/90':''}>
-          {over?`Past ${guide} guide (${usedPct}% used)`:`${remPct}% of guide still available`}
+          {over?`Over ${guide} budget — ${formatCost(current-cap)} over limit`:`${formatCost(remaining)} remaining`}
         </span>
       </div>
     </div>
@@ -194,17 +209,20 @@ async function callProviderApi(provider,modelId,apiKey,priorMessages,newText){
     const ep={openai:'https://api.openai.com/v1/chat/completions',xai:'https://api.x.ai/v1/chat/completions',deepseek:'https://api.deepseek.com/chat/completions'};
     const res=await fetch(ep[provider],{method:'POST',headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:modelId,messages:allMessages})});
     if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`${provider} error ${res.status}`);}
-    const d=await res.json(); return d.choices?.[0]?.message?.content??'';
+    const d=await res.json();
+    return{text:d.choices?.[0]?.message?.content??'',inputTokens:d.usage?.prompt_tokens??0,outputTokens:d.usage?.completion_tokens??0};
   }
   if(provider==='anthropic'){
     const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','content-type':'application/json'},body:JSON.stringify({model:modelId,max_tokens:2048,messages:allMessages})});
     if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`Anthropic error ${res.status}`);}
-    const d=await res.json(); return d.content?.[0]?.text??'';
+    const d=await res.json();
+    return{text:d.content?.[0]?.text??'',inputTokens:d.usage?.input_tokens??0,outputTokens:d.usage?.output_tokens??0};
   }
   if(provider==='google'){
     const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:allMessages.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))})});
     if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`Google error ${res.status}`);}
-    const d=await res.json(); return d.candidates?.[0]?.content?.parts?.[0]?.text??'';
+    const d=await res.json();
+    return{text:d.candidates?.[0]?.content?.parts?.[0]?.text??'',inputTokens:d.usageMetadata?.promptTokenCount??0,outputTokens:d.usageMetadata?.candidatesTokenCount??0};
   }
   throw new Error(`Unknown provider: ${provider}`);
 }
@@ -270,7 +288,7 @@ export default function DesktopChatPage() {
   const loadMessages = useCallback(async (id) => {
     if (!id) { setMessages([]); return; }
     setLoadingMessages(true);
-    try { const d=await callApi(`/chat/conversations/${id}/messages`); setMessages(mapRowsToMessages(d.messages)); }
+    try { const d=await callApi(`/chat/conversations/${id}/messages`); const msgs=mapRowsToMessages(d.messages); setMessages(msgs); return msgs; }
     catch (e) { setErr(e.message||String(e)); setMessages([]); }
     finally { setLoadingMessages(false); }
   }, [callApi]);
@@ -451,8 +469,8 @@ export default function DesktopChatPage() {
     }
   }, [conversations, conversationId]);
 
-  const bumpDailyMessages  = useCallback((n=1)=>{ setDailyUsage(prev=>{const d=todayLocalISO();const b=prev.day===d?prev:{day:d,messages:0};const nx={day:d,messages:b.messages+n};writeDailyUsage(nx);return nx;}); }, []);
-  const bumpWeeklyMessages = useCallback((n=1)=>{ setWeeklyUsage(prev=>{const w=mondayLocalISO();const b=prev.weekStart===w?prev:{weekStart:w,messages:0};const nx={weekStart:w,messages:b.messages+n};writeWeeklyUsage(nx);return nx;}); }, []);
+  const bumpDailyCost  = useCallback((n)=>{ setDailyUsage(prev=>{const d=todayLocalISO();const b=prev.day===d?prev:{day:d,cost:0};const nx={day:d,cost:b.cost+n};writeDailyUsage(nx);return nx;}); }, []);
+  const bumpWeeklyCost = useCallback((n)=>{ setWeeklyUsage(prev=>{const w=mondayLocalISO();const b=prev.weekStart===w?prev:{weekStart:w,cost:0};const nx={weekStart:w,cost:b.cost+n};writeWeeklyUsage(nx);return nx;}); }, []);
 
   // ── Actions ───────────────────────────────────────────────────────────────
   const selectConversation = (id) => { setErr(''); setConversationId(id); };
@@ -475,16 +493,20 @@ export default function DesktopChatPage() {
       if(selectedModel.provider!=='modulon'){
         const apiKey=apiKeys[selectedModel.provider];
         if(!apiKey)throw new Error(`No API key saved for ${selectedModel.label}. Add one in Settings → API Keys.`);
-        const reply=await callProviderApi(selectedModel.provider,selectedModel.id,apiKey,messages,text);
-        setMessages(m=>[...m.filter(x=>x.id!==opt.id),opt,{id:`ai-${Date.now()}`,role:'assistant',text:reply}]);
+        const result=await callProviderApi(selectedModel.provider,selectedModel.id,apiKey,messages,text);
+        setMessages(m=>[...m.filter(x=>x.id!==opt.id),opt,{id:`ai-${Date.now()}`,role:'assistant',text:result.text}]);
+        const inTok=result.inputTokens||Math.ceil(text.length/4);
+        const outTok=result.outputTokens||Math.ceil(result.text.length/4);
+        const cost=calcCost(selectedModel.id,inTok,outTok);
+        bumpDailyCost(cost); bumpWeeklyCost(cost);
       } else {
         const data=await callApi('/chat',{method:'POST',body:{message:text,conversationId}});
         const cid=data.conversationId;
         if(cid)setConversationId(cid);
         await refreshConversations();
         if(cid)await loadMessages(cid);
+        // Modulon runs on your own server — no external API cost
       }
-      bumpDailyMessages(1); bumpWeeklyMessages(1);
     } catch(e){
       setErr(e.message||String(e));
       setMessages(m=>[...m.filter(x=>x.id!==opt.id),{id:`err-${Date.now()}`,role:'assistant',text:e.message||'Could not reach the chat API.',error:true}]);
@@ -931,12 +953,12 @@ export default function DesktopChatPage() {
                   <div className="w-full space-y-8">
                     <section className="space-y-4">
                       <h3 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-white">Daily Usage</h3>
-                      <UsageProgressBar period="daily" label="Messages you send" current={dailyUsage.messages} cap={extraUsage?DAILY_MESSAGE_CAP_EXTRA:DAILY_MESSAGE_CAP} />
+                      <UsageProgressBar period="daily" label="API spend" current={dailyUsage.cost} cap={extraUsage?DAILY_COST_CAP_EXTRA:DAILY_COST_CAP} />
                     </section>
                     <div className="h-px bg-gradient-to-r from-transparent via-zinc-200 to-transparent dark:via-white/[0.08]" />
                     <section className="space-y-4">
                       <h3 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-white">Weekly Usage</h3>
-                      <UsageProgressBar period="weekly" label="Messages you send" current={weeklyUsage.messages} cap={extraUsage?WEEKLY_MESSAGE_CAP_EXTRA:WEEKLY_MESSAGE_CAP} />
+                      <UsageProgressBar period="weekly" label="API spend" current={weeklyUsage.cost} cap={extraUsage?WEEKLY_COST_CAP_EXTRA:WEEKLY_COST_CAP} />
                     </section>
                     <div className="h-px bg-gradient-to-r from-transparent via-zinc-200 to-transparent dark:via-white/[0.08]" />
                     <div className="space-y-4">
