@@ -1465,15 +1465,17 @@ export default function ChatPage() {
               value={input}
               onChange={(e) => {
                 setInput(e.target.value);
-                const el = textareaRef.current;
-                if (el) { el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 200)}px`; }
+                const el = e.target;
+                el.style.height = '1px';
+                el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
               }}
               placeholder={isHome ? t('chat.messagePlaceholder') : t('chat.typeMessage')}
               disabled={sending || apiOk === false}
-              className="min-w-0 flex-1 resize-none overflow-hidden border-0 bg-transparent py-2.5 pl-0.5 pr-2 text-sm leading-relaxed text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-45 dark:text-white/90 dark:placeholder:text-white/25"
+              className="min-w-0 flex-1 resize-none border-0 bg-transparent py-2.5 pl-0.5 pr-2 text-sm leading-relaxed text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-45 dark:text-white/90 dark:placeholder:text-white/25"
+              style={{ overflowY: 'hidden' }}
               autoComplete="off"
               aria-label="Message"
             />
