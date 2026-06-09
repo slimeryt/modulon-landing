@@ -227,17 +227,6 @@ async function callProviderApi(provider,modelId,apiKey,priorMessages,newText){
   throw new Error(`Unknown provider: ${provider}`);
 }
 
-async function persistProviderExchange(callApi, convId, userText, assistantText) {
-  await callApi(`/chat/conversations/${convId}/messages`, {
-    method: 'POST',
-    body: { role: 'user', body: userText },
-  });
-  await callApi(`/chat/conversations/${convId}/messages`, {
-    method: 'POST',
-    body: { role: 'assistant', body: assistantText },
-  });
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 export default function DesktopChatPage() {
   const { firebaseConfigured, user, signOutUser, sendPasswordReset } = useAuth();
@@ -512,17 +501,12 @@ export default function DesktopChatPage() {
         const apiKey=apiKeys[selectedModel.provider];
         if(!apiKey)throw new Error(`No API key saved for ${selectedModel.label}. Add one in Settings → API Keys.`);
 
-        let convId=conversationId;
-        if(!convId){
-          const created=await callApi('/chat/conversations',{method:'POST'});
-          convId=created.id;
-        }
-
         const result=await callProviderApi(selectedModel.provider,selectedModel.id,apiKey,messages,text);
-        await persistProviderExchange(callApi,convId,text,result.text);
-        setConversationId(convId);
+        const data=await callApi('/chat',{method:'POST',body:{message:text,conversationId,external:true,assistantReply:result.text}});
+        const convId=data.conversationId;
+        if(convId)setConversationId(convId);
         await refreshConversations();
-        await loadMessages(convId);
+        if(convId)await loadMessages(convId);
 
         const inTok=result.inputTokens||Math.ceil(text.length/4);
         const outTok=result.outputTokens||Math.ceil(result.text.length/4);

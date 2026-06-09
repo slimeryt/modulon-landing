@@ -8,7 +8,7 @@
  *   GET  /api/chat/conversations/:id/messages
  *   POST /api/chat/conversations/:id/messages   { role, body, prototype? }
  *   DEL  /api/chat/conversations/:id
- *   POST /api/chat   { message, conversationId? }
+ *   POST /api/chat   { message, conversationId?, external?, assistantReply? }
  *
  * Run:  node server/chat-api.mjs
  *       npm run dev:all   (Vite + API together)
@@ -386,7 +386,7 @@ app.post('/api/chat', async (req, res) => {
   const uid = await extractUserId(req);
   if (FIREBASE_CONFIGURED && !uid) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { message, conversationId } = req.body ?? {};
+  const { message, conversationId, assistantReply, external } = req.body ?? {};
   if (!message?.trim()) return res.status(400).json({ error: 'Empty message' });
 
   let convId = conversationId;
@@ -404,6 +404,12 @@ app.post('/api/chat', async (req, res) => {
 
   if (q.msgCount.get(convId).n === 1) {
     q.updateTitle.run(message.slice(0, 60), convId);
+  }
+
+  if (external && assistantReply?.trim()) {
+    q.insertMsg.run(crypto.randomUUID(), convId, 'assistant', assistantReply, 0);
+    q.touchConvo.run(convId);
+    return res.json({ conversationId: convId, response: assistantReply });
   }
 
   let reply;
