@@ -1768,8 +1768,9 @@ export default function ChatPage() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ email: user.email }),
                           });
-                          const data = await res.json();
-                          if (!res.ok) throw new Error(data.error || 'Failed to send reset email.');
+                          let data = {};
+                          try { data = await res.json(); } catch { /* empty body */ }
+                          if (!res.ok) throw new Error(data.error || `Server error (${res.status})`);
                           setSettingsNotice('Check your email for a password reset link.');
                         } catch (err) {
                           setSettingsNotice(`Error: ${err.message}`);
