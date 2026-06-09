@@ -227,6 +227,17 @@ async function callProviderApi(provider,modelId,apiKey,priorMessages,newText){
   throw new Error(`Unknown provider: ${provider}`);
 }
 
+async function persistProviderExchange(callApi, convId, userText, assistantText) {
+  await callApi(`/chat/conversations/${convId}/messages`, {
+    method: 'POST',
+    body: { role: 'user', body: userText },
+  });
+  await callApi(`/chat/conversations/${convId}/messages`, {
+    method: 'POST',
+    body: { role: 'assistant', body: assistantText },
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 export default function DesktopChatPage() {
   const { firebaseConfigured, user, signOutUser, sendPasswordReset } = useAuth();
@@ -500,8 +511,19 @@ export default function DesktopChatPage() {
       if(selectedModel.provider!=='modulon'){
         const apiKey=apiKeys[selectedModel.provider];
         if(!apiKey)throw new Error(`No API key saved for ${selectedModel.label}. Add one in Settings → API Keys.`);
+
+        let convId=conversationId;
+        if(!convId){
+          const created=await callApi('/chat/conversations',{method:'POST'});
+          convId=created.id;
+        }
+
         const result=await callProviderApi(selectedModel.provider,selectedModel.id,apiKey,messages,text);
-        setMessages(m=>[...m.filter(x=>x.id!==opt.id),opt,{id:`ai-${Date.now()}`,role:'assistant',text:result.text}]);
+        await persistProviderExchange(callApi,convId,text,result.text);
+        setConversationId(convId);
+        await refreshConversations();
+        await loadMessages(convId);
+
         const inTok=result.inputTokens||Math.ceil(text.length/4);
         const outTok=result.outputTokens||Math.ceil(result.text.length/4);
         const cost=calcCost(selectedModel.id,inTok,outTok);
@@ -527,7 +549,8 @@ export default function DesktopChatPage() {
   const deleteConvoFromMenu    = useCallback(async()=>{ const id=contextMenu?.conversationId; if(!id)return; setErr(''); try{await callApi(`/chat/conversations/${id}`,{method:'DELETE'});await refreshConversations();if(conversationId===id){setConversationId(null);setMessages([]);}}catch(ex){setErr(ex.message||String(ex));} closeContextMenu(); }, [contextMenu, conversationId, refreshConversations, closeContextMenu, callApi]);
   const openSettingsFromMenu   = useCallback(()=>{ setSettingsNotice(''); setSettingsSection('appearance'); setSettingsOpen(true); closeContextMenu(); }, [closeContextMenu]);
 
-  const isHome = !conversationId && apiOk !== false;
+  const isHome = !conversationId && messages.length === 0 && apiOk !== false;
+  const thinkingLabel = `${selectedModel.label} is thinking…`;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -718,7 +741,7 @@ export default function DesktopChatPage() {
                       <span className="inline-flex gap-1">
                         {[0,150,300].map(d=><span key={d} className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 dark:bg-white/40" style={{animationDelay:`${d}ms`}}/>)}
                       </span>
-                      {t('chat.thinking')}
+                      {thinkingLabel}
                     </div>
                   </div>
                 )}
@@ -748,7 +771,7 @@ export default function DesktopChatPage() {
                       <span className="inline-flex gap-1">
                         {[0,150,300].map(d=><span key={d} className="w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-white/40 animate-bounce" style={{animationDelay:`${d}ms`}}/>)}
                       </span>
-                      {t('chat.thinking')}
+                      {thinkingLabel}
                     </div>
                   </div>
                 )}

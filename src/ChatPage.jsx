@@ -476,6 +476,17 @@ async function callProviderApi(provider, modelId, apiKey, priorMessages, newText
   throw new Error(`Unknown provider: ${provider}`);
 }
 
+async function persistProviderExchange(callApi, convId, userText, assistantText) {
+  await callApi(`/chat/conversations/${convId}/messages`, {
+    method: 'POST',
+    body: { role: 'user', body: userText },
+  });
+  await callApi(`/chat/conversations/${convId}/messages`, {
+    method: 'POST',
+    body: { role: 'assistant', body: assistantText },
+  });
+}
+
 export default function ChatPage() {
   const navigate = useNavigate();
   const { firebaseConfigured, user, signOutUser, sendPasswordReset } = useAuth();
@@ -998,12 +1009,19 @@ export default function ChatPage() {
       if (selectedModel.provider !== 'modulon') {
         const apiKey = apiKeys[selectedModel.provider];
         if (!apiKey) throw new Error(`No API key saved for ${selectedModel.label}. Add one in Settings → API Keys.`);
+
+        let convId = conversationId;
+        if (!convId) {
+          const created = await callApi('/chat/conversations', { method: 'POST' });
+          convId = created.id;
+        }
+
         const result = await callProviderApi(selectedModel.provider, selectedModel.id, apiKey, messages, text);
-        setMessages((m) => [
-          ...m.filter((x) => x.id !== optimisticUser.id),
-          optimisticUser,
-          { id: `ai-${Date.now()}`, role: 'assistant', text: result.text },
-        ]);
+        await persistProviderExchange(callApi, convId, text, result.text);
+        setConversationId(convId);
+        await refreshConversations();
+        await loadMessages(convId);
+
         const inTok  = result.inputTokens  || Math.ceil(text.length / 4);
         const outTok = result.outputTokens || Math.ceil(result.text.length / 4);
         const cost = calcCost(selectedModel.id, inTok, outTok);
@@ -1036,7 +1054,8 @@ export default function ChatPage() {
     }
   };
 
-  const isHome = !conversationId && apiOk !== false;
+  const isHome = !conversationId && messages.length === 0 && apiOk !== false;
+  const thinkingLabel = `${selectedModel.label} is thinking…`;
 
   return (
     <div className="h-screen overflow-hidden bg-zinc-100 text-zinc-900 dark:bg-[#070708] dark:text-white font-sans selection:bg-zinc-300/40 dark:selection:bg-white/20">
@@ -1366,7 +1385,7 @@ export default function ChatPage() {
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 dark:bg-white/40" style={{ animationDelay: '150ms' }} />
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 dark:bg-white/40" style={{ animationDelay: '300ms' }} />
                     </span>
-                    {t('chat.thinking')}
+                    {thinkingLabel}
                   </div>
                 </div>
               ) : null}
@@ -1409,7 +1428,7 @@ export default function ChatPage() {
                   <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-white/40 animate-bounce" style={{ animationDelay: '150ms' }} />
                   <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-white/40 animate-bounce" style={{ animationDelay: '300ms' }} />
                 </span>
-                {t('chat.thinking')}
+                {thinkingLabel}
               </div>
             </div>
           ) : null}

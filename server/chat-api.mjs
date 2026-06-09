@@ -6,6 +6,7 @@
  *   GET  /api/chat/conversations
  *   POST /api/chat/conversations
  *   GET  /api/chat/conversations/:id/messages
+ *   POST /api/chat/conversations/:id/messages   { role, body, prototype? }
  *   DEL  /api/chat/conversations/:id
  *   POST /api/chat   { message, conversationId? }
  *
@@ -353,6 +354,31 @@ app.delete('/api/chat/conversations/:id', async (req, res) => {
   if (convo && FIREBASE_CONFIGURED && uid && convo.user_id && convo.user_id !== uid)
     return res.status(403).json({ error: 'Forbidden' });
   q.deleteConvo.run(req.params.id);
+  res.json({ ok: true });
+});
+
+app.post('/api/chat/conversations/:id/messages', async (req, res) => {
+  const uid = await extractUserId(req);
+  if (FIREBASE_CONFIGURED && !uid) return res.status(401).json({ error: 'Unauthorized' });
+
+  const convo = q.getConvo.get(req.params.id);
+  if (!convo) return res.status(404).json({ error: 'Not found' });
+  if (FIREBASE_CONFIGURED && uid && convo.user_id && convo.user_id !== uid)
+    return res.status(403).json({ error: 'Forbidden' });
+
+  const { role, body, prototype } = req.body ?? {};
+  if (!body?.trim()) return res.status(400).json({ error: 'Empty message' });
+  if (role !== 'user' && role !== 'assistant')
+    return res.status(400).json({ error: 'Invalid role' });
+
+  const countBefore = q.msgCount.get(req.params.id).n;
+  q.insertMsg.run(crypto.randomUUID(), req.params.id, role, body, prototype ? 1 : 0);
+  q.touchConvo.run(req.params.id);
+
+  if (countBefore === 0 && role === 'user') {
+    q.updateTitle.run(body.slice(0, 60), req.params.id);
+  }
+
   res.json({ ok: true });
 });
 
