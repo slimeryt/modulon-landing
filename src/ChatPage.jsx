@@ -494,6 +494,8 @@ export default function ChatPage() {
     () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsMounted, setSettingsMounted] = useState(false);
+  const [settingsVisible, setSettingsVisible] = useState(false);
   const [settingsSection, setSettingsSection] = useState('account');
   const [settingsNotice, setSettingsNotice] = useState('');
   const bottomRef = useRef(null);
@@ -506,6 +508,8 @@ export default function ChatPage() {
   const modelPickerBtnRef = useRef(null);
   const modelSelectMenuRef = useRef(null);
   const textareaRef = useRef(null);
+  const tabNavRef = useRef(null);
+  const [tabIndicator, setTabIndicator] = useState(null);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [attachMenuPos, setAttachMenuPos] = useState(null);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
@@ -632,6 +636,21 @@ export default function ChatPage() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, [settingsOpen]);
+
+  useEffect(() => {
+    if (settingsOpen) {
+      setSettingsMounted(true);
+      let raf2;
+      const raf = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => setSettingsVisible(true));
+      });
+      return () => { cancelAnimationFrame(raf); cancelAnimationFrame(raf2); };
+    } else {
+      setSettingsVisible(false);
+      const t = setTimeout(() => setSettingsMounted(false), 220);
+      return () => clearTimeout(t);
+    }
   }, [settingsOpen]);
 
   useEffect(() => {
@@ -780,6 +799,15 @@ export default function ChatPage() {
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
   }, [modelMenuOpen]);
+
+  useLayoutEffect(() => {
+    if (!settingsOpen || !tabNavRef.current) return;
+    const activeBtn = tabNavRef.current.querySelector('[aria-current="page"]');
+    if (!activeBtn) return;
+    const navRect = tabNavRef.current.getBoundingClientRect();
+    const btnRect = activeBtn.getBoundingClientRect();
+    setTabIndicator({ left: btnRect.left - navRect.left, width: btnRect.width });
+  }, [settingsSection, settingsOpen]);
 
   useEffect(() => {
     if (!modelMenuOpen) return;
@@ -1114,7 +1142,7 @@ export default function ChatPage() {
       >
         <aside
           className={`flex min-h-0 flex-1 flex-col overflow-hidden border border-zinc-200/90 bg-white/90 text-zinc-900 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:border-white/[0.12] dark:bg-white/[0.06] dark:text-white dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] ${
-            sidebarOpen ? 'rounded-3xl' : 'rounded-full'
+            sidebarOpen ? 'rounded-[2rem]' : 'rounded-full'
           }`}
         >
         <div
@@ -1562,9 +1590,9 @@ export default function ChatPage() {
         </div>
       </main>
 
-      {settingsOpen ? (
+      {settingsMounted ? (
         <div
-          className="fixed inset-0 z-[100] flex items-stretch justify-center p-0 sm:items-center sm:p-6"
+          className={`fixed inset-0 z-[100] flex items-stretch justify-center p-0 transition-opacity duration-200 sm:items-center sm:p-6 ${settingsVisible ? 'opacity-100' : 'opacity-0'}`}
           role="dialog"
           aria-modal="true"
           aria-labelledby="chat-settings-title"
@@ -1575,26 +1603,23 @@ export default function ChatPage() {
             aria-label="Close settings"
             onClick={() => setSettingsOpen(false)}
           />
-          <div className="relative z-10 flex h-[100dvh] w-full max-w-none flex-col overflow-hidden border-0 bg-white/85 shadow-none backdrop-blur-2xl dark:bg-white/[0.07] dark:backdrop-blur-2xl sm:h-[min(84vh,640px)] sm:min-h-[min(380px,68vh)] sm:max-w-[min(92vw,56rem)] sm:rounded-2xl sm:border sm:border-zinc-200/60 sm:bg-white/90 sm:shadow-[0_24px_80px_rgba(0,0,0,0.12)] dark:sm:border-white/[0.1] dark:sm:bg-white/[0.08] dark:sm:shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-200/40 bg-transparent px-4 py-3.5 dark:border-white/[0.06] max-sm:pt-[max(0.875rem,env(safe-area-inset-top,0px))] sm:px-5 sm:py-4">
-              <h2 id="chat-settings-title" className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-white sm:text-xl">
+          <div className={`relative z-10 flex h-[100dvh] w-full max-w-none flex-col overflow-hidden border-0 bg-white/85 shadow-none backdrop-blur-2xl transition-[opacity,transform] duration-200 dark:bg-white/[0.07] dark:backdrop-blur-2xl sm:h-[min(84vh,640px)] sm:min-h-[min(380px,68vh)] sm:max-w-[min(92vw,56rem)] sm:rounded-[2rem] sm:border sm:border-zinc-200/60 sm:bg-white/90 sm:shadow-[0_24px_80px_rgba(0,0,0,0.12)] dark:sm:border-white/[0.1] dark:sm:bg-white/[0.08] dark:sm:shadow-[0_24px_80px_rgba(0,0,0,0.45)] ${settingsVisible ? 'opacity-100 scale-100' : 'opacity-0 sm:scale-[0.97]'}`}>
+            <div className="flex shrink-0 items-center gap-2 border-b border-zinc-200/40 bg-transparent px-4 py-2.5 dark:border-white/[0.06] max-sm:pt-[max(0.625rem,env(safe-area-inset-top,0px))] sm:px-5">
+              <h2 id="chat-settings-title" className="shrink-0 text-base font-semibold tracking-tight text-zinc-900 dark:text-white sm:text-lg">
                 Settings
               </h2>
-              <button
-                type="button"
-                onClick={() => setSettingsOpen(false)}
-                className="p-2 rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40 dark:text-white/45 dark:hover:bg-white/[0.08] dark:hover:text-white dark:focus-visible:ring-white/25"
-                aria-label="Close settings"
-              >
-                <X className="w-5 h-5" aria-hidden />
-              </button>
-            </div>
-
-            <div className="flex min-h-0 flex-1 flex-col bg-transparent sm:flex-row">
               <nav
-                className="flex shrink-0 flex-row gap-1 overflow-x-auto border-b border-zinc-200/20 bg-transparent p-2 no-scrollbar dark:border-white/[0.04] sm:w-52 sm:flex-col sm:overflow-y-auto sm:border-b-0 sm:border-r sm:border-zinc-200/15 sm:bg-transparent dark:sm:border-white/[0.04]"
+                className="flex min-w-0 flex-1 overflow-x-auto no-scrollbar"
                 aria-label="Settings sections"
               >
+              <div ref={tabNavRef} className="relative mx-auto flex gap-1 rounded-full border border-zinc-200/80 bg-zinc-100/80 p-1 dark:border-white/[0.08] dark:bg-white/[0.05]">
+                {tabIndicator && (
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute top-1 bottom-1 rounded-full bg-white shadow-sm ring-1 ring-zinc-200/80 transition-[left,width] duration-200 ease-out dark:bg-white/[0.14] dark:ring-white/10"
+                    style={{ left: tabIndicator.left, width: tabIndicator.width }}
+                  />
+                )}
                 {[
                   ...(user
                     ? [
@@ -1606,24 +1631,36 @@ export default function ChatPage() {
                   { id: 'usage', label: 'Usage', Icon: BarChart3 },
                   { id: 'apikeys', label: 'API Keys', Icon: Key },
                   { id: 'about', label: 'About', Icon: Info },
-                ].map(({ id, label, Icon }) => (
+                ].map(({ id, label, Icon }, index) => (
                   <button
                     key={id}
                     type="button"
                     onClick={() => setSettingsSection(id)}
                     aria-current={settingsSection === id ? 'page' : undefined}
-                    className={`flex shrink-0 items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors sm:w-full ${
+                    className={`relative z-10 flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium transition-[colors,opacity] duration-150 ${
                       settingsSection === id
-                        ? 'bg-zinc-200/90 text-zinc-900 ring-1 ring-zinc-300/80 dark:bg-white/[0.12] dark:text-white dark:ring-white/10'
-                        : 'text-zinc-600 hover:bg-zinc-100/90 hover:text-zinc-900 dark:text-white/50 dark:hover:bg-white/[0.06] dark:hover:text-white/80'
-                    }`}
+                        ? 'text-zinc-900 dark:text-white'
+                        : 'text-zinc-500 hover:text-zinc-800 dark:text-white/45 dark:hover:text-white/75'
+                    } ${settingsVisible ? 'opacity-100' : 'opacity-0'}`}
+                    style={{ transitionDelay: settingsVisible ? `${index * 40}ms` : '0ms' }}
                   >
                     <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
                     {label}
                   </button>
                 ))}
+              </div>
               </nav>
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(false)}
+                className="shrink-0 flex items-center justify-center size-9 rounded-full border border-zinc-200/80 bg-zinc-100/80 text-zinc-500 transition-colors hover:bg-zinc-200/90 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-white/45 dark:hover:bg-white/[0.1] dark:hover:text-white dark:focus-visible:ring-white/25"
+                aria-label="Close settings"
+              >
+                <X className="w-4 h-4" aria-hidden />
+              </button>
+            </div>
 
+            <div className="flex min-h-0 flex-1 flex-col bg-transparent">
               <div className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-transparent p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] no-scrollbar sm:p-6 sm:pb-6">
                 {settingsNotice ? (
                   <p
@@ -1719,18 +1756,23 @@ export default function ChatPage() {
                   <div className="max-w-lg space-y-4">
                     <p className="text-[10px] font-medium uppercase tracking-widest text-zinc-500 dark:text-white/35">Password</p>
                     <p className="text-sm leading-relaxed text-zinc-600 dark:text-white/45">
-                      Sends a password reset link to your account email via Firebase Auth. Use the link in the email
-                      to choose a new password.
+                      Sends a password reset link to your account email. Use the link in the email to choose a new password.
                     </p>
                     <button
                       type="button"
                       onClick={async () => {
                         setSettingsNotice('');
                         try {
-                          await sendPasswordReset(user.email);
+                          const res = await fetch('/api/auth/send-reset-email', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email: user.email }),
+                          });
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data.error || 'Failed to send reset email.');
                           setSettingsNotice('Check your email for a password reset link.');
                         } catch (err) {
-                          setSettingsNotice(`Error: ${mapAuthError(err)}`);
+                          setSettingsNotice(`Error: ${err.message}`);
                         }
                       }}
                       className="rounded-xl border border-zinc-300/90 px-4 py-3 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-white/15 dark:text-white/80 dark:hover:bg-white/[0.06]"
@@ -1879,12 +1921,29 @@ export default function ChatPage() {
                 ) : null}
 
                 {settingsSection === 'about' ? (
-                  <div className="max-w-lg space-y-3 text-sm leading-relaxed text-zinc-600 dark:text-white/45">
-                    <p className="text-[10px] font-medium uppercase tracking-widest text-zinc-500 dark:text-white/35">Modulon chat</p>
-                    <p>
-                      Conversations are stored for this session and workspace. When Firebase is enabled, your account
-                      is used for sign-in only; manage credentials and recovery from this panel.
-                    </p>
+                  <div className="flex flex-col items-start gap-6 py-4">
+                    <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-zinc-200/80 bg-zinc-50/80 dark:border-white/[0.08] dark:bg-white/[0.04]">
+                      <img
+                        src={modulonIcon}
+                        alt="Modulon"
+                        className="h-12 w-12 object-contain opacity-90 dark:opacity-95"
+                        decoding="async"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-white">Modulon</h3>
+                      <p className="text-sm text-zinc-500 dark:text-white/40">AI Chatbot</p>
+                    </div>
+                    <div className="flex flex-col gap-2 w-full max-w-xs">
+                      <div className="flex items-center justify-between rounded-full border border-zinc-200/80 bg-zinc-50/80 px-4 py-2 dark:border-white/[0.08] dark:bg-white/[0.04]">
+                        <span className="text-xs font-medium text-zinc-500 dark:text-white/40">Website</span>
+                        <span className="font-mono text-xs font-semibold text-zinc-900 dark:text-white">v0.1.0-BETA</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-full border border-zinc-200/80 bg-zinc-50/80 px-4 py-2 dark:border-white/[0.08] dark:bg-white/[0.04]">
+                        <span className="text-xs font-medium text-zinc-500 dark:text-white/40">AI Model</span>
+                        <span className="font-mono text-xs font-semibold text-zinc-900 dark:text-white">M0.1</span>
+                      </div>
+                    </div>
                   </div>
                 ) : null}
               </div>

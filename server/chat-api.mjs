@@ -24,8 +24,39 @@ import path      from 'path';
 import { fileURLToPath } from 'url';
 import dotenv    from 'dotenv';
 import https from 'https';
+import { createRequire } from 'module';
 
 dotenv.config();
+
+const _require = createRequire(import.meta.url);
+
+// ── Firebase Admin (password reset link generation) ───────────────────────────
+let adminAuth = null;
+try {
+  const admin = _require('firebase-admin');
+  const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
+  const privateKey  = (process.env.FIREBASE_ADMIN_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+  const projectId   = process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || '';
+  if (clientEmail && privateKey && projectId && !admin.apps.length) {
+    admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
+    adminAuth = admin.auth();
+    console.log('[admin] Firebase Admin initialised.');
+  }
+} catch (e) {
+  console.warn('[admin] Firebase Admin not available:', e.message);
+}
+
+// ── Resend (email delivery) ───────────────────────────────────────────────────
+let resendClient = null;
+try {
+  const { Resend } = _require('resend');
+  if (process.env.RESEND_API_KEY) {
+    resendClient = new Resend(process.env.RESEND_API_KEY);
+    console.log('[resend] Resend client ready.');
+  }
+} catch (e) {
+  console.warn('[resend] Resend not available:', e.message);
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT      = path.join(__dirname, '..');
@@ -251,6 +282,42 @@ function askPython(message) {
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
+
+app.post('/api/auth/send-reset-email', async (req, res) => {
+  const { email } = req.body || {};
+  if (!email) return res.status(400).json({ error: 'Email is required.' });
+  if (!adminAuth) return res.status(503).json({ error: 'Password reset is not configured on this server. Set FIREBASE_ADMIN_* env vars.' });
+  if (!resendClient) return res.status(503).json({ error: 'Email service is not configured. Set RESEND_API_KEY env var.' });
+  try {
+    const resetLink = await adminAuth.generatePasswordResetLink(email);
+    const from = process.env.RESEND_FROM || 'Modulon <noreply@modulon.app>';
+    await resendClient.emails.send({
+      from,
+      to: email,
+      subject: 'Reset your Modulon password',
+      html: `
+        <div style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#0a0a0b;color:#fff;border-radius:16px">
+          <img src="https://modulon.app/icon-512.png" width="48" height="48" alt="Modulon" style="margin-bottom:24px;border-radius:10px" />
+          <h1 style="font-size:22px;font-weight:600;margin:0 0 8px">Reset your password</h1>
+          <p style="color:rgba(255,255,255,0.55);margin:0 0 28px;font-size:15px;line-height:1.6">
+            We received a request to reset your Modulon password for <strong style="color:#fff">${email}</strong>.
+            Click the button below — it expires in 1 hour.
+          </p>
+          <a href="${resetLink}" style="display:inline-block;background:#fff;color:#000;font-weight:600;font-size:14px;padding:12px 24px;border-radius:999px;text-decoration:none;margin-bottom:28px">
+            Reset password
+          </a>
+          <p style="color:rgba(255,255,255,0.3);font-size:12px;margin:0">
+            If you didn't request this, you can ignore this email. Your password won't change.
+          </p>
+        </div>`,
+    });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[reset-email]', err);
+    return res.status(500).json({ error: err.message || 'Failed to send reset email.' });
+  }
+});
+
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, modelReady: pythonReady });
 });
