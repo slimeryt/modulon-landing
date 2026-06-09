@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { Link, useNavigate } from 'react-router-dom';
 import {
   BarChart3,
+  Check,
   ChevronDown,
   ClipboardCopy,
   Copy,
@@ -42,6 +43,46 @@ const API = (() => {
 const MODULON_CHAT_MODEL_LABEL = 'Modulon M0.1';
 /** Placeholder copy in the model menu until additional models ship. */
 const MODULON_MODEL_MENU_SOON = 'More soon…';
+
+const PROVIDER_MODELS = {
+  anthropic: {
+    label: 'Anthropic',
+    models: [
+      { id: 'claude-opus-4-5',    label: 'Claude Opus 4.5'    },
+      { id: 'claude-sonnet-4-5',  label: 'Claude Sonnet 4.5'  },
+      { id: 'claude-haiku-4-5',   label: 'Claude Haiku 4.5'   },
+    ],
+  },
+  openai: {
+    label: 'OpenAI',
+    models: [
+      { id: 'gpt-4o',      label: 'GPT-4o'      },
+      { id: 'gpt-4o-mini', label: 'GPT-4o mini' },
+      { id: 'o3-mini',     label: 'o3-mini'     },
+    ],
+  },
+  google: {
+    label: 'Google',
+    models: [
+      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
+      { id: 'gemini-1.5-pro',   label: 'Gemini 1.5 Pro'   },
+    ],
+  },
+  xai: {
+    label: 'xAI',
+    models: [
+      { id: 'grok-3',      label: 'Grok 3'      },
+      { id: 'grok-3-mini', label: 'Grok 3 mini' },
+    ],
+  },
+  deepseek: {
+    label: 'DeepSeek',
+    models: [
+      { id: 'deepseek-chat',      label: 'DeepSeek V3' },
+      { id: 'deepseek-reasoner',  label: 'DeepSeek R1' },
+    ],
+  },
+};
 
 const DAILY_USAGE_KEY = 'modulon-daily-usage';
 const WEEKLY_USAGE_KEY = 'modulon-weekly-usage';
@@ -381,6 +422,7 @@ export default function ChatPage() {
   const [apiKeys, setApiKeys] = useState(() => readApiKeys());
   const [apiKeyDrafts, setApiKeyDrafts] = useState(() => readApiKeys());
   const [apiKeysVisible, setApiKeysVisible] = useState({ anthropic: false, openai: false, google: false, xai: false, deepseek: false });
+  const [selectedModel, setSelectedModel] = useState({ id: 'modulon', label: MODULON_CHAT_MODEL_LABEL, provider: 'modulon' });
 
   // Wraps apiJson with the current user's Firebase ID token
   const callApi = useCallback(async (path, opts = {}) => {
@@ -1326,10 +1368,10 @@ export default function ChatPage() {
               disabled={sending || apiOk === false}
               aria-expanded={modelMenuOpen}
               aria-haspopup="menu"
-              aria-label={`Model: ${MODULON_CHAT_MODEL_LABEL}. ${MODULON_MODEL_MENU_SOON}`}
+              aria-label={`Model: ${selectedModel.label}`}
               className="inline-flex h-11 min-w-0 max-w-[7rem] shrink-0 items-center gap-0.5 rounded-full border border-transparent px-2 text-[11px] font-medium leading-tight text-zinc-600 transition-colors hover:border-zinc-200/80 hover:bg-zinc-100/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/50 disabled:pointer-events-none disabled:opacity-35 dark:text-white/65 dark:hover:border-white/15 dark:hover:bg-white/[0.06] dark:focus-visible:ring-white/25 sm:max-w-[min(52vw,11rem)] sm:text-xs"
             >
-              <span className="min-w-0 truncate">{MODULON_CHAT_MODEL_LABEL}</span>
+              <span className="min-w-0 truncate">{selectedModel.label}</span>
               <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden strokeWidth={2} />
             </button>
             {modelMenuOpen && modelMenuPos ? (
@@ -1337,16 +1379,52 @@ export default function ChatPage() {
                 ref={modelSelectMenuRef}
                 role="menu"
                 aria-label="Models"
-                className="fixed z-[80] w-52 overflow-hidden rounded-xl border border-zinc-200/90 bg-white py-1 text-sm shadow-xl dark:border-white/[0.12] dark:bg-[#121214]"
+                className="fixed z-[80] w-56 overflow-hidden rounded-xl border border-zinc-200/90 bg-white py-1 text-sm shadow-xl dark:border-white/[0.12] dark:bg-[#121214]"
                 style={{ left: modelMenuPos.left, bottom: modelMenuPos.bottom }}
               >
-                <div
-                  role="menuitem"
-                  tabIndex={-1}
-                  aria-disabled="true"
-                  className="px-3 py-2.5 text-center text-xs font-medium italic text-zinc-500 dark:text-white/40"
-                >
-                  {MODULON_MODEL_MENU_SOON}
+                <div className="max-h-72 overflow-y-auto no-scrollbar">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => { setSelectedModel({ id: 'modulon', label: MODULON_CHAT_MODEL_LABEL, provider: 'modulon' }); setModelMenuOpen(false); }}
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                      selectedModel.id === 'modulon'
+                        ? 'bg-zinc-100 font-medium text-zinc-900 dark:bg-white/[0.08] dark:text-white'
+                        : 'text-zinc-800 hover:bg-zinc-50 dark:text-white/85 dark:hover:bg-white/[0.05]'
+                    }`}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{MODULON_CHAT_MODEL_LABEL}</span>
+                    {selectedModel.id === 'modulon' && <Check className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden />}
+                  </button>
+                  {Object.entries(PROVIDER_MODELS).filter(([pid]) => apiKeys[pid]).map(([pid, group]) => (
+                    <React.Fragment key={pid}>
+                      <div className="mx-3 my-1 border-t border-zinc-100 dark:border-white/[0.06]" />
+                      <p className="px-3 pb-1 pt-1.5 text-[10px] font-medium uppercase tracking-widest text-zinc-400 dark:text-white/30">
+                        {group.label}
+                      </p>
+                      {group.models.map(m => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          role="menuitem"
+                          onClick={() => { setSelectedModel({ id: m.id, label: m.label, provider: pid }); setModelMenuOpen(false); }}
+                          className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${
+                            selectedModel.id === m.id
+                              ? 'bg-zinc-100 font-medium text-zinc-900 dark:bg-white/[0.08] dark:text-white'
+                              : 'text-zinc-800 hover:bg-zinc-50 dark:text-white/85 dark:hover:bg-white/[0.05]'
+                          }`}
+                        >
+                          <span className="min-w-0 flex-1 truncate">{m.label}</span>
+                          {selectedModel.id === m.id && <Check className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden />}
+                        </button>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                  {!Object.keys(PROVIDER_MODELS).some(pid => apiKeys[pid]) && (
+                    <p className="px-3 py-2 text-center text-xs italic text-zinc-400 dark:text-white/30">
+                      Add API keys in Settings → API Keys
+                    </p>
+                  )}
                 </div>
               </div>
             ) : null}
