@@ -7,7 +7,10 @@ import {
   Copy,
   File,
   Image,
+  Eye,
+  EyeOff,
   Info,
+  Key,
   LogOut,
   MessageCircle,
   Monitor,
@@ -41,6 +44,7 @@ const DAILY_USAGE_KEY          = 'modulon-daily-usage';
 const WEEKLY_USAGE_KEY         = 'modulon-weekly-usage';
 const EXTRA_USAGE_KEY          = 'modulon-extra-usage';
 const EXTRA_USAGE_CREDITS_KEY  = 'modulon-extra-usage-credits';
+const API_KEYS_STORAGE_KEY     = 'modulon-api-keys';
 
 const DAILY_MESSAGE_CAP        = 120;
 const DAILY_MESSAGE_CAP_EXTRA  = 200;
@@ -97,6 +101,10 @@ function readExtraUsage()  { try{return localStorage.getItem(EXTRA_USAGE_KEY)===
 function writeExtraUsage(v){ try{localStorage.setItem(EXTRA_USAGE_KEY,v?'1':'0');}catch{} }
 function readExtraUsageCredits(){ try{const r=localStorage.getItem(EXTRA_USAGE_CREDITS_KEY);const n=Number(r);return Number.isFinite(n)?Math.max(0,n):0;}catch{return 0;} }
 function writeExtraUsageCredits(a){ try{localStorage.setItem(EXTRA_USAGE_CREDITS_KEY,String(a));}catch{} }
+
+const API_KEYS_DEFAULT={anthropic:'',openai:'',google:'',xai:''};
+function readApiKeys(){try{const r=localStorage.getItem(API_KEYS_STORAGE_KEY);return r?{...API_KEYS_DEFAULT,...JSON.parse(r)}:{...API_KEYS_DEFAULT};}catch{return{...API_KEYS_DEFAULT};}}
+function writeApiKeys(k){try{localStorage.setItem(API_KEYS_STORAGE_KEY,JSON.stringify(k));}catch{}}
 
 const USAGE_BAR_MESSAGES = 'from-cyan-500 via-sky-500 to-indigo-500 shadow-[0_0_22px_-6px_rgba(56,189,248,0.55)]';
 const USAGE_BAR_OVER     = 'from-amber-500 via-orange-500 to-rose-500 shadow-[0_0_24px_-4px_rgba(251,146,60,0.55)]';
@@ -181,6 +189,9 @@ export default function DesktopChatPage() {
   const [weeklyUsage,      setWeeklyUsage]      = useState(() => readWeeklyUsage());
   const [extraUsage,       setExtraUsage]       = useState(() => readExtraUsage());
   const [extraUsageCredits,setExtraUsageCredits]= useState(() => readExtraUsageCredits());
+  const [apiKeys,         setApiKeys]         = useState(() => readApiKeys());
+  const [apiKeyDrafts,    setApiKeyDrafts]     = useState(() => readApiKeys());
+  const [apiKeysVisible,  setApiKeysVisible]   = useState({anthropic:false,openai:false,google:false,xai:false});
 
   const bottomRef          = useRef(null);
   const contextMenuRef     = useRef(null);
@@ -760,6 +771,7 @@ export default function DesktopChatPage() {
                   ...(user?[{id:'account',label:'Account',Icon:User},{id:'security',label:'Security',Icon:Shield}]:[]),
                   {id:'appearance',label:'Appearance',Icon:Palette},
                   {id:'usage',label:'Usage',Icon:BarChart3},
+                  {id:'apikeys',label:'API Keys',Icon:Key},
                   {id:'about',label:'About',Icon:Info},
                 ].map(({id,label,Icon})=>(
                   <button key={id} type="button" onClick={()=>setSettingsSection(id)} aria-current={settingsSection===id?'page':undefined}
@@ -861,6 +873,51 @@ export default function DesktopChatPage() {
                         </button>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {settingsSection==='apikeys'&&(
+                  <div className="w-full space-y-6">
+                    <div>
+                      <p className="text-[10px] font-medium uppercase tracking-widest text-zinc-500 dark:text-white/35">Provider API Keys</p>
+                      <p className="mt-2 text-sm leading-relaxed text-zinc-600 dark:text-white/45">Keys are stored locally in your browser and sent with requests to each provider.</p>
+                    </div>
+                    {[
+                      {id:'anthropic',label:'Anthropic',      hint:'sk-ant-…', dot:'bg-amber-500'  },
+                      {id:'openai',   label:'OpenAI',          hint:'sk-…',     dot:'bg-emerald-500'},
+                      {id:'google',   label:'Google (Gemini)', hint:'AIza…',    dot:'bg-blue-500'   },
+                      {id:'xai',      label:'xAI (Grok)',      hint:'xai-…',    dot:'bg-purple-500' },
+                    ].map(({id,label,hint,dot})=>(
+                      <div key={id} className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${dot}`} aria-hidden />
+                          <span className="text-sm font-medium text-zinc-900 dark:text-white">{label}</span>
+                          {apiKeys[id]?<span className="ml-auto text-xs font-medium text-emerald-600 dark:text-emerald-400">Saved</span>:null}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="relative min-w-0 flex-1">
+                            <input
+                              type={apiKeysVisible[id]?'text':'password'}
+                              placeholder={hint}
+                              value={apiKeyDrafts[id]}
+                              onChange={e=>setApiKeyDrafts(prev=>({...prev,[id]:e.target.value}))}
+                              className="w-full rounded-xl border border-zinc-300/90 bg-transparent px-3 py-2.5 font-mono text-sm text-zinc-900 placeholder-zinc-400/60 focus:border-zinc-400 focus:outline-none dark:border-white/15 dark:text-white dark:placeholder-white/20 dark:focus:border-white/30"
+                              autoComplete="off" spellCheck={false}
+                            />
+                          </div>
+                          <button type="button" onClick={()=>setApiKeysVisible(prev=>({...prev,[id]:!prev[id]}))}
+                            aria-label={apiKeysVisible[id]?'Hide key':'Show key'}
+                            className="shrink-0 rounded-xl border border-zinc-300/90 p-2.5 text-zinc-500 hover:bg-zinc-100 dark:border-white/15 dark:text-white/45 dark:hover:bg-white/[0.06]">
+                            {apiKeysVisible[id]?<EyeOff className="h-4 w-4" aria-hidden/>:<Eye className="h-4 w-4" aria-hidden/>}
+                          </button>
+                          <button type="button"
+                            onClick={()=>{ const n={...apiKeys,[id]:apiKeyDrafts[id]};setApiKeys(n);writeApiKeys(n);setSettingsNotice(apiKeyDrafts[id]?`${label} key saved.`:`${label} key cleared.`); }}
+                            className="shrink-0 rounded-xl border border-zinc-300/90 px-3.5 py-2.5 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-white/15 dark:text-white/80 dark:hover:bg-white/[0.06]">
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
 
