@@ -187,6 +187,28 @@ function mapRowsToMessages(rows) {
   return (rows||[]).map(m=>({ id:m.id, role:m.role, text:m.body, prototype:!!m.prototype, createdAt:m.created_at }));
 }
 
+async function callProviderApi(provider,modelId,apiKey,priorMessages,newText){
+  const history=priorMessages.filter(m=>!m.error&&(m.role==='user'||m.role==='assistant')).map(m=>({role:m.role,content:m.text}));
+  const allMessages=[...history,{role:'user',content:newText}];
+  if(provider==='openai'||provider==='xai'||provider==='deepseek'){
+    const ep={openai:'https://api.openai.com/v1/chat/completions',xai:'https://api.x.ai/v1/chat/completions',deepseek:'https://api.deepseek.com/chat/completions'};
+    const res=await fetch(ep[provider],{method:'POST',headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:modelId,messages:allMessages})});
+    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`${provider} error ${res.status}`);}
+    const d=await res.json(); return d.choices?.[0]?.message?.content??'';
+  }
+  if(provider==='anthropic'){
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','content-type':'application/json'},body:JSON.stringify({model:modelId,max_tokens:2048,messages:allMessages})});
+    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`Anthropic error ${res.status}`);}
+    const d=await res.json(); return d.content?.[0]?.text??'';
+  }
+  if(provider==='google'){
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:allMessages.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))})});
+    if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`Google error ${res.status}`);}
+    const d=await res.json(); return d.candidates?.[0]?.content?.parts?.[0]?.text??'';
+  }
+  throw new Error(`Unknown provider: ${provider}`);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 export default function DesktopChatPage() {
   const { firebaseConfigured, user, signOutUser, sendPasswordReset } = useAuth();
@@ -229,6 +251,7 @@ export default function DesktopChatPage() {
   const attachMenuRef      = useRef(null);
   const modelPickerBtnRef  = useRef(null);
   const modelSelectMenuRef = useRef(null);
+  const textareaRef        = useRef(null);
 
   // ── Data ──────────────────────────────────────────────────────────────────
   // Wraps apiJson with the current user's Firebase ID token
@@ -443,19 +466,28 @@ export default function DesktopChatPage() {
   const send = async (textOverride) => {
     const text=(typeof textOverride==='string'?textOverride:input).trim();
     if(!text||sending||apiOk===false)return;
-    setInput(''); setErr('');
+    setInput('');
+    if(textareaRef.current){textareaRef.current.style.height='auto';}
+    setErr('');
     const opt={id:`tmp-${Date.now()}`,role:'user',text,prototype:false};
     setMessages(m=>[...m,opt]); setSending(true);
     try {
-      const data=await callApi('/chat',{method:'POST',body:{message:text,conversationId}});
-      const cid=data.conversationId;
-      if(cid)setConversationId(cid);
-      await refreshConversations();
-      if(cid)await loadMessages(cid);
+      if(selectedModel.provider!=='modulon'){
+        const apiKey=apiKeys[selectedModel.provider];
+        if(!apiKey)throw new Error(`No API key saved for ${selectedModel.label}. Add one in Settings → API Keys.`);
+        const reply=await callProviderApi(selectedModel.provider,selectedModel.id,apiKey,messages,text);
+        setMessages(m=>[...m.filter(x=>x.id!==opt.id),opt,{id:`ai-${Date.now()}`,role:'assistant',text:reply}]);
+      } else {
+        const data=await callApi('/chat',{method:'POST',body:{message:text,conversationId}});
+        const cid=data.conversationId;
+        if(cid)setConversationId(cid);
+        await refreshConversations();
+        if(cid)await loadMessages(cid);
+      }
       bumpDailyMessages(1); bumpWeeklyMessages(1);
     } catch(e){
       setErr(e.message||String(e));
-      setMessages(m=>[...m.filter(x=>x.id!==opt.id),{id:`err-${Date.now()}`,role:'assistant',text:'Could not reach the chat API. Run `npm run dev:all` (or `dev:api`).',error:true}]);
+      setMessages(m=>[...m.filter(x=>x.id!==opt.id),{id:`err-${Date.now()}`,role:'assistant',text:e.message||'Could not reach the chat API.',error:true}]);
     } finally { setSending(false); }
   };
 
@@ -700,10 +732,10 @@ export default function DesktopChatPage() {
             className={isHome?'pt-2':'border-t border-zinc-200/80 pt-2 dark:border-white/[0.06]'}
             onSubmit={(e)=>{e.preventDefault();send();}}
           >
-            <div className={`flex w-full items-center gap-0.5 border bg-white transition-shadow focus-within:ring-2 dark:bg-black/35 dark:shadow-none ${
+            <div className={`flex w-full items-end gap-0.5 border bg-white transition-shadow focus-within:ring-2 dark:bg-black/35 dark:shadow-none ${
               isHome
                 ?'rounded-2xl border-zinc-300/90 px-3 py-2 shadow-md focus-within:border-zinc-400/90 focus-within:ring-zinc-400/35 dark:border-white/12 dark:focus-within:border-white/22 dark:focus-within:ring-white/15'
-                :'rounded-full border-zinc-300/90 px-3 py-1.5 shadow-sm focus-within:border-zinc-400/90 focus-within:ring-zinc-400/35 dark:border-white/10 dark:focus-within:border-white/20 dark:focus-within:ring-white/15'
+                :'rounded-2xl border-zinc-300/90 px-3 py-1.5 shadow-sm focus-within:border-zinc-400/90 focus-within:ring-zinc-400/35 dark:border-white/10 dark:focus-within:border-white/20 dark:focus-within:ring-white/15'
             }`}>
               <input ref={fileInputRef}  type="file" className="sr-only" tabIndex={-1} multiple aria-hidden />
               <input ref={imageInputRef} type="file" accept="image/*" className="sr-only" tabIndex={-1} multiple aria-hidden />
@@ -735,13 +767,19 @@ export default function DesktopChatPage() {
                   </button>
                 </div>
               )}
-              <input
-                type="text"
+              <textarea
+                ref={textareaRef}
+                rows={1}
                 value={input}
-                onChange={(e)=>setInput(e.target.value)}
+                onChange={(e)=>{
+                  setInput(e.target.value);
+                  const el=textareaRef.current;
+                  if(el){el.style.height='auto';el.style.height=`${Math.min(el.scrollHeight,200)}px`;}
+                }}
+                onKeyDown={(e)=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}}
                 placeholder={isHome?t('chat.messagePlaceholder'):t('chat.typeMessage')}
                 disabled={sending||apiOk===false}
-                className="min-w-0 flex-1 border-0 bg-transparent py-2.5 pl-0.5 pr-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-45 dark:text-white/90 dark:placeholder:text-white/25"
+                className="min-w-0 flex-1 resize-none overflow-hidden border-0 bg-transparent py-2.5 pl-0.5 pr-2 text-sm leading-relaxed text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-45 dark:text-white/90 dark:placeholder:text-white/25"
                 autoComplete="off"
                 aria-label="Message"
               />
