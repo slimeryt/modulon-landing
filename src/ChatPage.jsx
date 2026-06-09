@@ -1274,7 +1274,7 @@ export default function ChatPage() {
       )}
 
       <main
-        className={`relative z-10 h-screen min-h-0 w-full overflow-hidden px-4 transition-[margin] duration-200 ease-out sm:px-6 md:py-6 ${
+        className={`relative z-10 h-screen min-h-0 overflow-hidden px-4 transition-[margin] duration-200 ease-out sm:px-6 md:py-6 ${
           sidebarOpen ? 'md:ml-[calc(18rem+2.5rem)]' : 'md:ml-[calc(3.5rem+2.5rem)]'
         } max-md:pb-[max(1rem,env(safe-area-inset-bottom,0px))] max-md:pt-[max(0.5rem,calc(env(safe-area-inset-top,0px)+3.5rem))]`}
       >
