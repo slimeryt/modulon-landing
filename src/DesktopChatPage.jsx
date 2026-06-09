@@ -676,7 +676,7 @@ export default function DesktopChatPage() {
             : 'ml-[calc(3.5rem+2.5rem)] w-[calc(100%-3.5rem-2.5rem)]'
         }`}
       >
-        <div className={`mx-auto flex h-full flex-col ${isHome?'max-w-3xl':'max-w-2xl'}`}>
+        <div className={`mx-auto flex h-full min-h-0 flex-col overflow-hidden ${isHome?'max-w-3xl':'max-w-2xl'}`}>
 
           {apiOk===false && (
             <div className="mb-4 rounded-xl border border-amber-500/35 bg-amber-500/[0.12] px-3 py-2.5 text-xs leading-relaxed text-amber-950 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-50/95">
@@ -717,7 +717,7 @@ export default function DesktopChatPage() {
           ) : (
             <>
               {loadingMessages&&conversationId&&<p className="mb-2 text-xs text-zinc-500 dark:text-white/35">{t('chat.loadingMessages')}</p>}
-              <div className="no-scrollbar flex-1 space-y-4 overflow-y-auto pb-4">
+              <div className="no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto pb-4">
                 {messages.map(msg=>(
                   <div key={msg.id} className={`flex ${msg.role==='user'?'justify-end':'justify-start'}`}>
                     <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
