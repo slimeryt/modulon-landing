@@ -21,6 +21,15 @@ export function languageByCode(code) {
   return LANGUAGES.find((l) => l.code === code) ?? LANGUAGES[0];
 }
 
+/** System instruction so third-party models match the user's language. */
+export function providerReplyPrompt(langCode) {
+  const { label } = languageByCode(langCode);
+  return (
+    `You are a helpful assistant. Always reply in the same language as the user's latest message. ` +
+    `If the language is unclear, use ${label}. Do not default to Chinese unless the user is writing in Chinese.`
+  );
+}
+
 /**
  * @returns {string}
  */

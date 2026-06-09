@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { useAuth, mapAuthError } from './AuthContext';
 import { useLanguage } from './LanguageContext';
+import { providerReplyPrompt } from './languages';
 import { useTheme } from './ThemeContext';
 import { translatedHomeGreeting } from './i18n/homeGreeting';
 import modulonIcon from './assets/icons/Modulon_Icon.png';
@@ -202,24 +203,25 @@ function mapRowsToMessages(rows) {
   return (rows||[]).map(m=>({ id:m.id, role:m.role, text:m.body, prototype:!!m.prototype, createdAt:m.created_at }));
 }
 
-async function callProviderApi(provider,modelId,apiKey,priorMessages,newText){
+async function callProviderApi(provider,modelId,apiKey,priorMessages,newText,replyLanguage='en'){
+  const systemPrompt=providerReplyPrompt(replyLanguage);
   const history=priorMessages.filter(m=>!m.error&&(m.role==='user'||m.role==='assistant')).map(m=>({role:m.role,content:m.text}));
-  const allMessages=[...history,{role:'user',content:newText}];
+  const userTurn={role:'user',content:newText};
   if(provider==='openai'||provider==='xai'||provider==='deepseek'){
     const ep={openai:'https://api.openai.com/v1/chat/completions',xai:'https://api.x.ai/v1/chat/completions',deepseek:'https://api.deepseek.com/chat/completions'};
-    const res=await fetch(ep[provider],{method:'POST',headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:modelId,messages:allMessages})});
+    const res=await fetch(ep[provider],{method:'POST',headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:modelId,messages:[{role:'system',content:systemPrompt},...history,userTurn]})});
     if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`${provider} error ${res.status}`);}
     const d=await res.json();
     return{text:d.choices?.[0]?.message?.content??'',inputTokens:d.usage?.prompt_tokens??0,outputTokens:d.usage?.completion_tokens??0};
   }
   if(provider==='anthropic'){
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','content-type':'application/json'},body:JSON.stringify({model:modelId,max_tokens:2048,messages:allMessages})});
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','content-type':'application/json'},body:JSON.stringify({model:modelId,max_tokens:2048,system:systemPrompt,messages:[...history,userTurn]})});
     if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`Anthropic error ${res.status}`);}
     const d=await res.json();
     return{text:d.content?.[0]?.text??'',inputTokens:d.usage?.input_tokens??0,outputTokens:d.usage?.output_tokens??0};
   }
   if(provider==='google'){
-    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:allMessages.map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))})});
+    const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({systemInstruction:{parts:[{text:systemPrompt}]},contents:[...history,userTurn].map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))})});
     if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`Google error ${res.status}`);}
     const d=await res.json();
     return{text:d.candidates?.[0]?.content?.parts?.[0]?.text??'',inputTokens:d.usageMetadata?.promptTokenCount??0,outputTokens:d.usageMetadata?.candidatesTokenCount??0};
@@ -231,7 +233,7 @@ async function callProviderApi(provider,modelId,apiKey,priorMessages,newText){
 export default function DesktopChatPage() {
   const { firebaseConfigured, user, signOutUser, sendPasswordReset } = useAuth();
   const { theme, setTheme }  = useTheme();
-  const { t }                = useLanguage();
+  const { t, language }      = useLanguage();
 
   const [conversations,    setConversations]    = useState([]);
   const [conversationId,   setConversationId]   = useState(null);
@@ -501,7 +503,7 @@ export default function DesktopChatPage() {
         const apiKey=apiKeys[selectedModel.provider];
         if(!apiKey)throw new Error(`No API key saved for ${selectedModel.label}. Add one in Settings → API Keys.`);
 
-        const result=await callProviderApi(selectedModel.provider,selectedModel.id,apiKey,messages,text);
+        const result=await callProviderApi(selectedModel.provider,selectedModel.id,apiKey,messages,text,language);
         const data=await callApi('/chat',{method:'POST',body:{message:text,conversationId,external:true,assistantReply:result.text}});
         const convId=data.conversationId;
         if(convId)setConversationId(convId);

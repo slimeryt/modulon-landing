@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { useAuth, mapAuthError } from './AuthContext';
 import { useLanguage } from './LanguageContext';
+import { providerReplyPrompt } from './languages';
 import { useTheme } from './ThemeContext';
 import { translatedHomeGreeting } from './i18n/homeGreeting';
 import modulonIcon from './assets/icons/Modulon_Icon.png';
@@ -407,11 +408,12 @@ function mapRowsToMessages(rows) {
   }));
 }
 
-async function callProviderApi(provider, modelId, apiKey, priorMessages, newText) {
+async function callProviderApi(provider, modelId, apiKey, priorMessages, newText, replyLanguage = 'en') {
+  const systemPrompt = providerReplyPrompt(replyLanguage);
   const history = priorMessages
     .filter(m => !m.error && (m.role === 'user' || m.role === 'assistant'))
     .map(m => ({ role: m.role, content: m.text }));
-  const allMessages = [...history, { role: 'user', content: newText }];
+  const userTurn = { role: 'user', content: newText };
 
   if (provider === 'openai' || provider === 'xai' || provider === 'deepseek') {
     const endpoints = {
@@ -422,7 +424,10 @@ async function callProviderApi(provider, modelId, apiKey, priorMessages, newText
     const res = await fetch(endpoints[provider], {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: modelId, messages: allMessages }),
+      body: JSON.stringify({
+        model: modelId,
+        messages: [{ role: 'system', content: systemPrompt }, ...history, userTurn],
+      }),
     });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e?.error?.message || `${provider} error ${res.status}`); }
     const d = await res.json();
@@ -442,7 +447,12 @@ async function callProviderApi(provider, modelId, apiKey, priorMessages, newText
         'anthropic-dangerous-direct-browser-access': 'true',
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ model: modelId, max_tokens: 2048, messages: allMessages }),
+      body: JSON.stringify({
+        model: modelId,
+        max_tokens: 2048,
+        system: systemPrompt,
+        messages: [...history, userTurn],
+      }),
     });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e?.error?.message || `Anthropic error ${res.status}`); }
     const d = await res.json();
@@ -455,14 +465,17 @@ async function callProviderApi(provider, modelId, apiKey, priorMessages, newText
 
   if (provider === 'google') {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`;
-    const contents = allMessages.map(m => ({
+    const contents = [...history, userTurn].map(m => ({
       role: m.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: m.content }],
     }));
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents }),
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents,
+      }),
     });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e?.error?.message || `Google error ${res.status}`); }
     const d = await res.json();
@@ -480,7 +493,7 @@ export default function ChatPage() {
   const navigate = useNavigate();
   const { firebaseConfigured, user, signOutUser, sendPasswordReset } = useAuth();
   const { theme, setTheme } = useTheme();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [conversations, setConversations] = useState([]);
   const [conversationId, setConversationId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -999,7 +1012,7 @@ export default function ChatPage() {
         const apiKey = apiKeys[selectedModel.provider];
         if (!apiKey) throw new Error(`No API key saved for ${selectedModel.label}. Add one in Settings → API Keys.`);
 
-        const result = await callProviderApi(selectedModel.provider, selectedModel.id, apiKey, messages, text);
+        const result = await callProviderApi(selectedModel.provider, selectedModel.id, apiKey, messages, text, language);
         const data = await callApi('/chat', {
           method: 'POST',
           body: {
