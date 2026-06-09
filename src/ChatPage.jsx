@@ -232,7 +232,7 @@ function writeExtraUsageCredits(amount) {
   }
 }
 
-const API_KEYS_DEFAULT = { anthropic: '', openai: '', google: '', xai: '' };
+const API_KEYS_DEFAULT = { anthropic: '', openai: '', google: '', xai: '', deepseek: '' };
 
 function readApiKeys() {
   try {
@@ -380,7 +380,7 @@ export default function ChatPage() {
   const [extraUsageCredits, setExtraUsageCredits] = useState(() => readExtraUsageCredits());
   const [apiKeys, setApiKeys] = useState(() => readApiKeys());
   const [apiKeyDrafts, setApiKeyDrafts] = useState(() => readApiKeys());
-  const [apiKeysVisible, setApiKeysVisible] = useState({ anthropic: false, openai: false, google: false, xai: false });
+  const [apiKeysVisible, setApiKeysVisible] = useState({ anthropic: false, openai: false, google: false, xai: false, deepseek: false });
 
   // Wraps apiJson with the current user's Firebase ID token
   const callApi = useCallback(async (path, opts = {}) => {
@@ -1629,6 +1629,7 @@ export default function ChatPage() {
                       { id: 'openai',    label: 'OpenAI',          hint: 'sk-…',      dot: 'bg-emerald-500' },
                       { id: 'google',    label: 'Google (Gemini)', hint: 'AIza…',     dot: 'bg-blue-500'    },
                       { id: 'xai',       label: 'xAI (Grok)',      hint: 'xai-…',     dot: 'bg-purple-500'  },
+                      { id: 'deepseek',  label: 'DeepSeek',         hint: 'sk-…',      dot: 'bg-sky-500'     },
                     ].map(({ id, label, hint, dot }) => (
                       <div key={id} className="space-y-2">
                         <div className="flex items-center gap-2">

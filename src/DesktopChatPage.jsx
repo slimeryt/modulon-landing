@@ -102,7 +102,7 @@ function writeExtraUsage(v){ try{localStorage.setItem(EXTRA_USAGE_KEY,v?'1':'0')
 function readExtraUsageCredits(){ try{const r=localStorage.getItem(EXTRA_USAGE_CREDITS_KEY);const n=Number(r);return Number.isFinite(n)?Math.max(0,n):0;}catch{return 0;} }
 function writeExtraUsageCredits(a){ try{localStorage.setItem(EXTRA_USAGE_CREDITS_KEY,String(a));}catch{} }
 
-const API_KEYS_DEFAULT={anthropic:'',openai:'',google:'',xai:''};
+const API_KEYS_DEFAULT={anthropic:'',openai:'',google:'',xai:'',deepseek:''};
 function readApiKeys(){try{const r=localStorage.getItem(API_KEYS_STORAGE_KEY);return r?{...API_KEYS_DEFAULT,...JSON.parse(r)}:{...API_KEYS_DEFAULT};}catch{return{...API_KEYS_DEFAULT};}}
 function writeApiKeys(k){try{localStorage.setItem(API_KEYS_STORAGE_KEY,JSON.stringify(k));}catch{}}
 
@@ -191,7 +191,7 @@ export default function DesktopChatPage() {
   const [extraUsageCredits,setExtraUsageCredits]= useState(() => readExtraUsageCredits());
   const [apiKeys,         setApiKeys]         = useState(() => readApiKeys());
   const [apiKeyDrafts,    setApiKeyDrafts]     = useState(() => readApiKeys());
-  const [apiKeysVisible,  setApiKeysVisible]   = useState({anthropic:false,openai:false,google:false,xai:false});
+  const [apiKeysVisible,  setApiKeysVisible]   = useState({anthropic:false,openai:false,google:false,xai:false,deepseek:false});
 
   const bottomRef          = useRef(null);
   const contextMenuRef     = useRef(null);
@@ -887,6 +887,7 @@ export default function DesktopChatPage() {
                       {id:'openai',   label:'OpenAI',          hint:'sk-…',     dot:'bg-emerald-500'},
                       {id:'google',   label:'Google (Gemini)', hint:'AIza…',    dot:'bg-blue-500'   },
                       {id:'xai',      label:'xAI (Grok)',      hint:'xai-…',    dot:'bg-purple-500' },
+                      {id:'deepseek', label:'DeepSeek',         hint:'sk-…',     dot:'bg-sky-500'    },
                     ].map(({id,label,hint,dot})=>(
                       <div key={id} className="space-y-2">
                         <div className="flex items-center gap-2">
