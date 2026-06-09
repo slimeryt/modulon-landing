@@ -1114,7 +1114,7 @@ export default function ChatPage() {
       >
         <aside
           className={`flex min-h-0 flex-1 flex-col overflow-hidden border border-zinc-200/90 bg-white/90 text-zinc-900 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.12)] backdrop-blur-xl dark:border-white/[0.12] dark:bg-white/[0.06] dark:text-white dark:shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] ${
-            sidebarOpen ? 'rounded-2xl' : 'rounded-full'
+            sidebarOpen ? 'rounded-3xl' : 'rounded-full'
           }`}
         >
         <div
@@ -1233,7 +1233,7 @@ export default function ChatPage() {
         ) : (
           <div
             className={`shrink-0 border border-zinc-200/90 bg-white/90 shadow-[0_8px_30px_-8px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:border-white/[0.12] dark:bg-white/[0.06] dark:shadow-[0_8px_30px_-8px_rgba(0,0,0,0.45)] ${
-              sidebarOpen ? 'space-y-2 rounded-2xl p-3' : 'rounded-full p-2 max-md:space-y-2 max-md:rounded-2xl max-md:p-3 md:flex md:flex-col md:items-center md:justify-center md:gap-0 md:space-y-0'
+              sidebarOpen ? 'space-y-2 rounded-3xl p-3' : 'rounded-full p-2 max-md:space-y-2 max-md:rounded-3xl max-md:p-3 md:flex md:flex-col md:items-center md:justify-center md:gap-0 md:space-y-0'
             }`}
           >
             <div
