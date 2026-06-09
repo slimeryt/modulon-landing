@@ -536,7 +536,6 @@ export default function DesktopChatPage() {
   const openSettingsFromMenu   = useCallback(()=>{ setSettingsNotice(''); setSettingsSection('appearance'); setSettingsOpen(true); closeContextMenu(); }, [closeContextMenu]);
 
   const isHome = !conversationId && messages.length === 0 && apiOk !== false;
-  const thinkingLabel = `${selectedModel.label} is thinking…`;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -727,7 +726,7 @@ export default function DesktopChatPage() {
                       <span className="inline-flex gap-1">
                         {[0,150,300].map(d=><span key={d} className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 dark:bg-white/40" style={{animationDelay:`${d}ms`}}/>)}
                       </span>
-                      {thinkingLabel}
+                      {t('chat.thinking')}
                     </div>
                   </div>
                 )}
@@ -757,7 +756,7 @@ export default function DesktopChatPage() {
                       <span className="inline-flex gap-1">
                         {[0,150,300].map(d=><span key={d} className="w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-white/40 animate-bounce" style={{animationDelay:`${d}ms`}}/>)}
                       </span>
-                      {thinkingLabel}
+                      {t('chat.thinking')}
                     </div>
                   </div>
                 )}

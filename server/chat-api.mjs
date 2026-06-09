@@ -34,14 +34,19 @@ const _require = createRequire(import.meta.url);
 // ── Firebase Admin (password reset link generation) ───────────────────────────
 let adminAuth = null;
 try {
-  const admin = _require('firebase-admin');
+  const { initializeApp, getApps, cert } = _require('firebase-admin');
+  const { getAuth } = _require('firebase-admin/auth');
   const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
   const privateKey  = (process.env.FIREBASE_ADMIN_PRIVATE_KEY || '').replace(/\\n/g, '\n');
   const projectId   = process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || '';
-  if (clientEmail && privateKey && projectId && !admin.apps.length) {
-    admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
-    adminAuth = admin.auth();
+  if (clientEmail && privateKey && projectId) {
+    if (getApps().length === 0) {
+      initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) });
+    }
+    adminAuth = getAuth();
     console.log('[admin] Firebase Admin initialised.');
+  } else {
+    console.log('[admin] Firebase Admin skipped — set FIREBASE_ADMIN_CLIENT_EMAIL, FIREBASE_ADMIN_PRIVATE_KEY, and FIREBASE_ADMIN_PROJECT_ID for password reset.');
   }
 } catch (e) {
   console.warn('[admin] Firebase Admin not available:', e.message);

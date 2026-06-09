@@ -1060,7 +1060,6 @@ export default function ChatPage() {
   };
 
   const isHome = !conversationId && messages.length === 0 && apiOk !== false;
-  const thinkingLabel = `${selectedModel.label} is thinking…`;
 
   return (
     <div className="h-screen overflow-hidden bg-zinc-100 text-zinc-900 dark:bg-[#070708] dark:text-white font-sans selection:bg-zinc-300/40 dark:selection:bg-white/20">
@@ -1390,7 +1389,7 @@ export default function ChatPage() {
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 dark:bg-white/40" style={{ animationDelay: '150ms' }} />
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 dark:bg-white/40" style={{ animationDelay: '300ms' }} />
                     </span>
-                    {thinkingLabel}
+                    {t('chat.thinking')}
                   </div>
                 </div>
               ) : null}
@@ -1433,7 +1432,7 @@ export default function ChatPage() {
                   <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-white/40 animate-bounce" style={{ animationDelay: '150ms' }} />
                   <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-white/40 animate-bounce" style={{ animationDelay: '300ms' }} />
                 </span>
-                {thinkingLabel}
+                {t('chat.thinking')}
               </div>
             </div>
           ) : null}
