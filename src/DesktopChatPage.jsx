@@ -246,6 +246,7 @@ export default function DesktopChatPage() {
   const [settingsOpen,     setSettingsOpen]     = useState(false);
   const [settingsSection,  setSettingsSection]  = useState('account');
   const [settingsNotice,   setSettingsNotice]   = useState('');
+  const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
   const [attachMenuOpen,   setAttachMenuOpen]   = useState(false);
   const [attachMenuPos,    setAttachMenuPos]    = useState(null);
   const [modelMenuOpen,    setModelMenuOpen]    = useState(false);
@@ -329,12 +330,18 @@ export default function DesktopChatPage() {
     return()=>{document.body.style.overflow=prev;};
   }, []);
 
+  useEffect(()=>{ if(!settingsOpen)setSignOutConfirmOpen(false); }, [settingsOpen]);
+
   useEffect(()=>{
-    if(!settingsOpen)return;
-    const h=(e)=>{if(e.key==='Escape')setSettingsOpen(false);};
+    if(!settingsOpen&&!signOutConfirmOpen)return;
+    const h=(e)=>{
+      if(e.key!=='Escape')return;
+      if(signOutConfirmOpen)setSignOutConfirmOpen(false);
+      else if(settingsOpen)setSettingsOpen(false);
+    };
     window.addEventListener('keydown',h);
     return()=>window.removeEventListener('keydown',h);
-  }, [settingsOpen]);
+  }, [settingsOpen, signOutConfirmOpen]);
 
   useEffect(()=>{ if(!sidebarOpen){setSettingsOpen(false);setContextMenu(null);} }, [sidebarOpen]);
 
@@ -640,10 +647,13 @@ export default function DesktopChatPage() {
             <button
               type="button"
               onClick={()=>{ setSettingsNotice(''); setSettingsSection('account'); setSettingsOpen(true); }}
-              className={`shrink-0 rounded-full p-2.5 text-zinc-500 transition-colors hover:bg-zinc-200/80 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40 dark:text-white/40 dark:hover:bg-white/[0.1] dark:hover:text-white/75 dark:focus-visible:ring-white/25 ${sidebarOpen?'':'hidden'}`}
+              className={`sidebar-settings-btn flex shrink-0 items-center rounded-full text-zinc-500 hover:bg-zinc-200/80 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40 dark:text-white/40 dark:hover:bg-white/[0.1] dark:hover:text-white/75 dark:focus-visible:ring-white/25 ${sidebarOpen?'':'hidden'}`}
               aria-label="Open settings"
             >
-              <Settings className="h-4 w-4" aria-hidden />
+              <span className="sidebar-settings-icon inline-flex shrink-0">
+                <Settings className="h-4 w-4" aria-hidden />
+              </span>
+              <span className="sidebar-settings-label text-sm font-medium">Settings</span>
             </button>
           </div>
         ) : (
@@ -879,7 +889,7 @@ export default function DesktopChatPage() {
               <nav className="flex shrink-0 flex-row gap-1 overflow-x-auto border-b border-zinc-200/20 bg-transparent p-2 no-scrollbar dark:border-white/[0.04] sm:w-52 sm:flex-col sm:overflow-y-auto sm:border-b-0 sm:border-r sm:border-zinc-200/15 sm:bg-transparent dark:sm:border-white/[0.04]" aria-label="Settings sections">
                 {[
                   ...(user?[{id:'account',label:'Account',Icon:User},{id:'security',label:'Security',Icon:Shield}]:[]),
-                  {id:'appearance',label:'Appearance',Icon:Palette},
+                  {id:'appearance',label:'Customization',Icon:Palette},
                   {id:'usage',label:'Usage',Icon:BarChart3},
                   {id:'apikeys',label:'API Keys',Icon:Key},
                   {id:'about',label:'About',Icon:Info},
@@ -903,7 +913,7 @@ export default function DesktopChatPage() {
                   <div className="space-y-5">
                     <div>
                       <p className="mb-3 text-[10px] font-medium uppercase tracking-widest text-zinc-500 dark:text-white/35">Signed in as</p>
-                      <div className="flex items-center gap-4 rounded-xl border border-zinc-200/90 bg-zinc-50/80 p-4 dark:border-white/[0.1] dark:bg-white/[0.05]">
+                      <div className="flex items-center gap-4 rounded-full border border-zinc-200/90 bg-zinc-50/80 px-5 py-3 dark:border-white/[0.1] dark:bg-white/[0.05]">
                         {user.photoURL
                           ?<img src={user.photoURL} alt="" className="h-16 w-16 shrink-0 rounded-full bg-zinc-200 object-cover ring-1 ring-zinc-300/80 dark:bg-white/10 dark:ring-white/15 sm:h-[4.5rem] sm:w-[4.5rem]" referrerPolicy="no-referrer"/>
                           :<div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-zinc-200 to-zinc-100 text-base font-semibold text-zinc-700 ring-1 ring-zinc-300/80 dark:from-white/15 dark:to-white/5 dark:text-white/85 dark:ring-white/15 sm:h-[4.5rem] sm:w-[4.5rem] sm:text-lg" aria-hidden>{accountInitials(user)}</div>
@@ -914,10 +924,10 @@ export default function DesktopChatPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="sm:max-w-md">
+                    <div className="flex justify-center">
                       <button type="button"
-                        onClick={()=>{ setSettingsOpen(false); void signOutUser().then(()=>goHome()); }}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-800 hover:bg-red-500/15 dark:text-red-200/90">
+                        onClick={()=>setSignOutConfirmOpen(true)}
+                        className="inline-flex items-center justify-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-medium text-red-800 hover:bg-red-500/15 dark:text-red-200/90">
                         <LogOut className="h-4 w-4" aria-hidden />Sign out
                       </button>
                     </div>
@@ -931,7 +941,7 @@ export default function DesktopChatPage() {
                     <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Color theme">
                       {[{id:'dark',label:'Dark',Icon:Moon},{id:'light',label:'Light',Icon:Sun},{id:'system',label:'System',Icon:Monitor}].map(({id,label,Icon})=>(
                         <button key={id} type="button" role="radio" aria-checked={theme===id} onClick={()=>setTheme(id)}
-                          className={`inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${theme===id?'border-zinc-900 bg-zinc-900 text-white dark:border-white/25 dark:bg-white/[0.14] dark:text-white':'border-zinc-300/90 text-zinc-700 hover:bg-zinc-100 dark:border-white/15 dark:text-white/75 dark:hover:bg-white/[0.06]'}`}>
+                          className={`inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium transition-colors ${theme===id?'border-zinc-900 bg-zinc-900 text-white dark:border-white/25 dark:bg-white/[0.14] dark:text-white':'border-zinc-300/90 text-zinc-700 hover:bg-zinc-100 dark:border-white/15 dark:text-white/75 dark:hover:bg-white/[0.06]'}`}>
                           <Icon className="h-4 w-4 shrink-0 opacity-90" aria-hidden />{label}
                         </button>
                       ))}
@@ -945,7 +955,7 @@ export default function DesktopChatPage() {
                     <p className="text-sm leading-relaxed text-zinc-600 dark:text-white/45">Sends a password reset link to your account email via Firebase Auth.</p>
                     <button type="button"
                       onClick={async()=>{ setSettingsNotice(''); try{await sendPasswordReset(user.email);setSettingsNotice('Check your email for a password reset link.');}catch(ex){setSettingsNotice(`Error: ${mapAuthError(ex)}`);} }}
-                      className="rounded-xl border border-zinc-300/90 px-4 py-3 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-white/15 dark:text-white/80 dark:hover:bg-white/[0.06]">
+                      className="rounded-full border border-zinc-300/90 px-4 py-2.5 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-white/15 dark:text-white/80 dark:hover:bg-white/[0.06]">
                       Send password reset email
                     </button>
                   </div>
@@ -1012,18 +1022,18 @@ export default function DesktopChatPage() {
                               placeholder={hint}
                               value={apiKeyDrafts[id]}
                               onChange={e=>setApiKeyDrafts(prev=>({...prev,[id]:e.target.value}))}
-                              className="w-full rounded-xl border border-zinc-300/90 bg-transparent px-3 py-2.5 font-mono text-sm text-zinc-900 placeholder-zinc-400/60 focus:border-zinc-400 focus:outline-none dark:border-white/15 dark:text-white dark:placeholder-white/20 dark:focus:border-white/30"
+                              className="w-full rounded-full border border-zinc-300/90 bg-transparent px-4 py-2.5 font-mono text-sm text-zinc-900 placeholder-zinc-400/60 focus:border-zinc-400 focus:outline-none dark:border-white/15 dark:text-white dark:placeholder-white/20 dark:focus:border-white/30"
                               autoComplete="off" spellCheck={false}
                             />
                           </div>
                           <button type="button" onClick={()=>setApiKeysVisible(prev=>({...prev,[id]:!prev[id]}))}
                             aria-label={apiKeysVisible[id]?'Hide key':'Show key'}
-                            className="shrink-0 rounded-xl border border-zinc-300/90 p-2.5 text-zinc-500 hover:bg-zinc-100 dark:border-white/15 dark:text-white/45 dark:hover:bg-white/[0.06]">
+                            className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-zinc-300/90 text-zinc-500 transition-colors hover:bg-zinc-100 dark:border-white/15 dark:text-white/45 dark:hover:bg-white/[0.06]">
                             {apiKeysVisible[id]?<EyeOff className="h-4 w-4" aria-hidden/>:<Eye className="h-4 w-4" aria-hidden/>}
                           </button>
                           <button type="button"
                             onClick={()=>{ const n={...apiKeys,[id]:apiKeyDrafts[id]};setApiKeys(n);writeApiKeys(n);setSettingsNotice(apiKeyDrafts[id]?`${label} key saved.`:`${label} key cleared.`); }}
-                            className="shrink-0 rounded-xl border border-zinc-300/90 px-3.5 py-2.5 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-white/15 dark:text-white/80 dark:hover:bg-white/[0.06]">
+                            className="inline-flex shrink-0 items-center justify-center rounded-full border border-zinc-300/90 px-4 py-2.5 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-white/15 dark:text-white/80 dark:hover:bg-white/[0.06]">
                             Save
                           </button>
                         </div>
@@ -1040,6 +1050,52 @@ export default function DesktopChatPage() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {signOutConfirmOpen && (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="sign-out-confirm-title"
+          aria-describedby="sign-out-confirm-desc"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50 backdrop-blur-[2px] dark:bg-black/55"
+            aria-label="Cancel sign out"
+            onClick={() => setSignOutConfirmOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-sm rounded-[1.5rem] border border-zinc-200/80 bg-white/95 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:border-white/[0.1] dark:bg-[#121214]/95 dark:shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+            <h3 id="sign-out-confirm-title" className="text-center text-base font-semibold tracking-tight text-zinc-900 dark:text-white">
+              Sign out?
+            </h3>
+            <p id="sign-out-confirm-desc" className="mt-2 text-center text-sm leading-relaxed text-zinc-600 dark:text-white/50">
+              You&apos;ll need to sign in again to access your account and synced chats.
+            </p>
+            <div className="mt-5 flex justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSignOutConfirmOpen(false)}
+                className="inline-flex items-center justify-center rounded-full border border-zinc-300/90 px-4 py-2.5 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-white/15 dark:text-white/80 dark:hover:bg-white/[0.06]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSignOutConfirmOpen(false);
+                  setSettingsOpen(false);
+                  void signOutUser().then(() => goHome());
+                }}
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-medium text-red-800 transition-colors hover:bg-red-500/15 dark:text-red-200/90"
+              >
+                <LogOut className="h-4 w-4" aria-hidden />
+                Sign out
+              </button>
             </div>
           </div>
         </div>

@@ -13,4 +13,6 @@ contextBridge.exposeInMainWorld('setup', {
   selfUpdate:            (url)   => ipcRenderer.invoke('self-update', url),
   onProgress:            (cb)    => ipcRenderer.on('progress',         (_, d) => cb(d)),
   onUpdateProgress:      (cb)    => ipcRenderer.on('update-dl-progress', (_, p) => cb(p)),
+  checkTerminalInstalled: ()     => ipcRenderer.invoke('check-terminal-installed'),
+  launchTerminal:         ()     => ipcRenderer.invoke('launch-terminal'),
 });

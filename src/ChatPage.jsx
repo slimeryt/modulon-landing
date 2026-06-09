@@ -498,6 +498,7 @@ export default function ChatPage() {
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [settingsSection, setSettingsSection] = useState('account');
   const [settingsNotice, setSettingsNotice] = useState('');
+  const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
   const bottomRef = useRef(null);
   const contextMenuRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -510,6 +511,7 @@ export default function ChatPage() {
   const textareaRef = useRef(null);
   const tabNavRef = useRef(null);
   const [tabIndicator, setTabIndicator] = useState(null);
+  const [spinningTab, setSpinningTab] = useState(null);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [attachMenuPos, setAttachMenuPos] = useState(null);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
@@ -630,13 +632,19 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
-    if (!settingsOpen) return undefined;
+    if (!settingsOpen) setSignOutConfirmOpen(false);
+  }, [settingsOpen]);
+
+  useEffect(() => {
+    if (!settingsOpen && !signOutConfirmOpen) return undefined;
     const onKey = (e) => {
-      if (e.key === 'Escape') setSettingsOpen(false);
+      if (e.key !== 'Escape') return;
+      if (signOutConfirmOpen) setSignOutConfirmOpen(false);
+      else if (settingsOpen) setSettingsOpen(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [settingsOpen]);
+  }, [settingsOpen, signOutConfirmOpen]);
 
   useEffect(() => {
     if (settingsOpen) {
@@ -801,13 +809,21 @@ export default function ChatPage() {
   }, [modelMenuOpen]);
 
   useLayoutEffect(() => {
-    if (!settingsOpen || !tabNavRef.current) return;
-    const activeBtn = tabNavRef.current.querySelector('[aria-current="page"]');
-    if (!activeBtn) return;
-    const navRect = tabNavRef.current.getBoundingClientRect();
-    const btnRect = activeBtn.getBoundingClientRect();
-    setTabIndicator({ left: btnRect.left - navRect.left, width: btnRect.width });
-  }, [settingsSection, settingsOpen]);
+    if (!settingsOpen || !settingsVisible || !tabNavRef.current) return;
+    const update = () => {
+      const nav = tabNavRef.current;
+      if (!nav) return;
+      const activeBtn = nav.querySelector('[aria-current="page"]');
+      if (!activeBtn) return;
+      const navRect = nav.getBoundingClientRect();
+      const btnRect = activeBtn.getBoundingClientRect();
+      setTabIndicator({ left: btnRect.left - navRect.left, width: btnRect.width });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(tabNavRef.current);
+    return () => ro.disconnect();
+  }, [settingsSection, settingsOpen, settingsVisible]);
 
   useEffect(() => {
     if (!modelMenuOpen) return;
@@ -1250,12 +1266,15 @@ export default function ChatPage() {
                 setSettingsSection('account');
                 setSettingsOpen(true);
               }}
-              className={`shrink-0 rounded-full p-2.5 text-zinc-500 transition-colors hover:bg-zinc-200/80 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40 dark:text-white/40 dark:hover:bg-white/[0.1] dark:hover:text-white/75 dark:focus-visible:ring-white/25 ${
+              className={`sidebar-settings-btn flex shrink-0 items-center rounded-full text-zinc-500 hover:bg-zinc-200/80 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40 dark:text-white/40 dark:hover:bg-white/[0.1] dark:hover:text-white/75 dark:focus-visible:ring-white/25 ${
                 sidebarOpen ? '' : 'md:hidden'
               }`}
               aria-label="Open settings"
             >
-              <Settings className="h-4 w-4" aria-hidden />
+              <span className="sidebar-settings-icon inline-flex shrink-0">
+                <Settings className="h-4 w-4" aria-hidden />
+              </span>
+              <span className="sidebar-settings-label text-sm font-medium">Settings</span>
             </button>
           </div>
         ) : (
@@ -1627,7 +1646,7 @@ export default function ChatPage() {
                         { id: 'security', label: 'Security', Icon: Shield },
                       ]
                     : []),
-                  { id: 'appearance', label: 'Appearance', Icon: Palette },
+                  { id: 'appearance', label: 'Customization', Icon: Palette },
                   { id: 'usage', label: 'Usage', Icon: BarChart3 },
                   { id: 'apikeys', label: 'API Keys', Icon: Key },
                   { id: 'about', label: 'About', Icon: Info },
@@ -1635,17 +1654,28 @@ export default function ChatPage() {
                   <button
                     key={id}
                     type="button"
-                    onClick={() => setSettingsSection(id)}
+                    onClick={() => {
+                      setSpinningTab(id);
+                      setSettingsSection(id);
+                    }}
+                    aria-label={label}
                     aria-current={settingsSection === id ? 'page' : undefined}
-                    className={`relative z-10 flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium transition-[colors,opacity] duration-150 ${
+                    className={`settings-tab-btn relative z-10 flex shrink-0 items-center rounded-full py-2 text-sm font-medium ${
                       settingsSection === id
                         ? 'text-zinc-900 dark:text-white'
                         : 'text-zinc-500 hover:text-zinc-800 dark:text-white/45 dark:hover:text-white/75'
                     } ${settingsVisible ? 'opacity-100' : 'opacity-0'}`}
                     style={{ transitionDelay: settingsVisible ? `${index * 40}ms` : '0ms' }}
                   >
-                    <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
-                    {label}
+                    <span
+                      className={`inline-flex shrink-0 ${spinningTab === id ? 'settings-tab-icon-spin' : ''}`}
+                      onAnimationEnd={() => {
+                        setSpinningTab((current) => (current === id ? null : current));
+                      }}
+                    >
+                      <Icon className="h-4 w-4 opacity-80" aria-hidden />
+                    </span>
+                    <span className="settings-tab-label">{label}</span>
                   </button>
                 ))}
               </div>
@@ -1680,7 +1710,7 @@ export default function ChatPage() {
                       <p className="mb-3 text-[10px] font-medium uppercase tracking-widest text-zinc-500 dark:text-white/35">
                         Signed in as
                       </p>
-                      <div className="flex items-center gap-4 rounded-xl border border-zinc-200/90 bg-zinc-50/80 p-4 dark:border-white/[0.1] dark:bg-white/[0.05]">
+                      <div className="flex items-center gap-4 rounded-full border border-zinc-200/90 bg-zinc-50/80 px-5 py-3 dark:border-white/[0.1] dark:bg-white/[0.05]">
                         {user.photoURL ? (
                           <img
                             src={user.photoURL}
@@ -1701,14 +1731,11 @@ export default function ChatPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="sm:max-w-md">
+                    <div className="flex justify-center">
                       <button
                         type="button"
-                        onClick={() => {
-                          setSettingsOpen(false);
-                          void signOutUser().then(() => navigate('/', { replace: true }));
-                        }}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-medium text-red-800 hover:bg-red-500/15 dark:text-red-200/90"
+                        onClick={() => setSignOutConfirmOpen(true)}
+                        className="inline-flex items-center justify-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-medium text-red-800 hover:bg-red-500/15 dark:text-red-200/90"
                       >
                         <LogOut className="h-4 w-4" aria-hidden />
                         Sign out
@@ -1738,7 +1765,7 @@ export default function ChatPage() {
                           role="radio"
                           aria-checked={theme === id}
                           onClick={() => setTheme(id)}
-                          className={`inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
+                          className={`inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium transition-colors ${
                             theme === id
                               ? 'border-zinc-900 bg-zinc-900 text-white dark:border-white/25 dark:bg-white/[0.14] dark:text-white'
                               : 'border-zinc-300/90 text-zinc-700 hover:bg-zinc-100 dark:border-white/15 dark:text-white/75 dark:hover:bg-white/[0.06]'
@@ -1776,7 +1803,7 @@ export default function ChatPage() {
                           setSettingsNotice(`Error: ${err.message}`);
                         }
                       }}
-                      className="rounded-xl border border-zinc-300/90 px-4 py-3 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-white/15 dark:text-white/80 dark:hover:bg-white/[0.06]"
+                      className="rounded-full border border-zinc-300/90 px-4 py-2.5 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-white/15 dark:text-white/80 dark:hover:bg-white/[0.06]"
                     >
                       Send password reset email
                     </button>
@@ -1888,7 +1915,7 @@ export default function ChatPage() {
                               placeholder={hint}
                               value={apiKeyDrafts[id]}
                               onChange={e => setApiKeyDrafts(prev => ({ ...prev, [id]: e.target.value }))}
-                              className="w-full rounded-xl border border-zinc-300/90 bg-transparent px-3 py-2.5 font-mono text-sm text-zinc-900 placeholder-zinc-400/60 focus:border-zinc-400 focus:outline-none dark:border-white/15 dark:text-white dark:placeholder-white/20 dark:focus:border-white/30"
+                              className="w-full rounded-full border border-zinc-300/90 bg-transparent px-4 py-2.5 font-mono text-sm text-zinc-900 placeholder-zinc-400/60 focus:border-zinc-400 focus:outline-none dark:border-white/15 dark:text-white dark:placeholder-white/20 dark:focus:border-white/30"
                               autoComplete="off"
                               spellCheck={false}
                             />
@@ -1897,7 +1924,7 @@ export default function ChatPage() {
                             type="button"
                             onClick={() => setApiKeysVisible(prev => ({ ...prev, [id]: !prev[id] }))}
                             aria-label={apiKeysVisible[id] ? 'Hide key' : 'Show key'}
-                            className="shrink-0 rounded-xl border border-zinc-300/90 p-2.5 text-zinc-500 hover:bg-zinc-100 dark:border-white/15 dark:text-white/45 dark:hover:bg-white/[0.06]"
+                            className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-zinc-300/90 text-zinc-500 transition-colors hover:bg-zinc-100 dark:border-white/15 dark:text-white/45 dark:hover:bg-white/[0.06]"
                           >
                             {apiKeysVisible[id]
                               ? <EyeOff className="h-4 w-4" aria-hidden />
@@ -1911,7 +1938,7 @@ export default function ChatPage() {
                               writeApiKeys(next);
                               setSettingsNotice(apiKeyDrafts[id] ? `${label} key saved.` : `${label} key cleared.`);
                             }}
-                            className="shrink-0 rounded-xl border border-zinc-300/90 px-3.5 py-2.5 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-white/15 dark:text-white/80 dark:hover:bg-white/[0.06]"
+                            className="inline-flex shrink-0 items-center justify-center rounded-full border border-zinc-300/90 px-4 py-2.5 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-white/15 dark:text-white/80 dark:hover:bg-white/[0.06]"
                           >
                             Save
                           </button>
@@ -1948,6 +1975,52 @@ export default function ChatPage() {
                   </div>
                 ) : null}
               </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {signOutConfirmOpen ? (
+        <div
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="sign-out-confirm-title"
+          aria-describedby="sign-out-confirm-desc"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50 backdrop-blur-[2px] dark:bg-black/55"
+            aria-label="Cancel sign out"
+            onClick={() => setSignOutConfirmOpen(false)}
+          />
+          <div className="relative z-10 w-full max-w-sm rounded-[1.5rem] border border-zinc-200/80 bg-white/95 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.18)] backdrop-blur-xl dark:border-white/[0.1] dark:bg-[#121214]/95 dark:shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+            <h3 id="sign-out-confirm-title" className="text-center text-base font-semibold tracking-tight text-zinc-900 dark:text-white">
+              Sign out?
+            </h3>
+            <p id="sign-out-confirm-desc" className="mt-2 text-center text-sm leading-relaxed text-zinc-600 dark:text-white/50">
+              You&apos;ll need to sign in again to access your account and synced chats.
+            </p>
+            <div className="mt-5 flex justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSignOutConfirmOpen(false)}
+                className="inline-flex items-center justify-center rounded-full border border-zinc-300/90 px-4 py-2.5 text-sm font-medium text-zinc-800 transition-colors hover:bg-zinc-100 dark:border-white/15 dark:text-white/80 dark:hover:bg-white/[0.06]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSignOutConfirmOpen(false);
+                  setSettingsOpen(false);
+                  void signOutUser().then(() => navigate('/', { replace: true }));
+                }}
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-medium text-red-800 transition-colors hover:bg-red-500/15 dark:text-red-200/90"
+              >
+                <LogOut className="h-4 w-4" aria-hidden />
+                Sign out
+              </button>
             </div>
           </div>
         </div>

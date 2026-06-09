@@ -158,6 +158,17 @@ ipcMain.handle('start-install', async (_event, { installDir, desktopShortcut, st
   }
 });
 
+const TERMINAL_EXE = path.join(os.homedir(), 'AppData', 'Local', 'Modulon Terminal', 'Modulon Terminal.exe');
+
+ipcMain.handle('check-terminal-installed', () => fs.existsSync(TERMINAL_EXE));
+
+ipcMain.handle('launch-terminal', () => {
+  if (!fs.existsSync(TERMINAL_EXE)) return { ok: false, error: 'Modulon Terminal is not installed.' };
+  const { spawn } = require('child_process');
+  spawn(TERMINAL_EXE, [], { detached: true, stdio: 'ignore' }).unref();
+  return { ok: true };
+});
+
 ipcMain.on('launch-app', (_event, targetPath) => {
   // targetPath can be the exe, a bat file, or a folder (open in Explorer)
   const resolved = targetPath.endsWith('\\.') || targetPath.endsWith('/.')

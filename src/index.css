@@ -16,6 +16,77 @@
   height: 0;
 }
 
+@keyframes tab-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@layer components {
+  .settings-tab-btn {
+    gap: 0;
+    padding-inline: 0.625rem;
+    transition:
+      gap 200ms ease-out,
+      padding 200ms ease-out,
+      color 150ms,
+      opacity 150ms;
+  }
+
+  .settings-tab-btn[aria-current='page'] {
+    gap: 0.375rem;
+    padding-inline: 0.75rem;
+  }
+
+  .settings-tab-btn .settings-tab-label {
+    max-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: max-width 200ms ease-out, opacity 200ms ease-out;
+  }
+
+  .settings-tab-btn[aria-current='page'] .settings-tab-label {
+    max-width: 7.75rem;
+    opacity: 1;
+  }
+
+  .settings-tab-icon-spin {
+    animation: tab-spin 0.45s ease-in-out;
+  }
+
+  .sidebar-settings-btn {
+    gap: 0;
+    padding: 0.625rem;
+    transition:
+      gap 200ms ease-out,
+      padding 200ms ease-out,
+      color 150ms,
+      background-color 150ms;
+  }
+
+  .sidebar-settings-btn:hover {
+    gap: 0.375rem;
+    padding-inline: 0.75rem;
+  }
+
+  .sidebar-settings-btn .sidebar-settings-label {
+    max-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: max-width 200ms ease-out, opacity 200ms ease-out;
+  }
+
+  .sidebar-settings-btn:hover .sidebar-settings-label {
+    max-width: 4.5rem;
+    opacity: 1;
+  }
+
+  .sidebar-settings-btn:hover .sidebar-settings-icon {
+    animation: tab-spin 0.45s ease-in-out;
+  }
+}
+
 /* Alias — scroll still works; bars stay hidden. */
 @layer utilities {
   .no-scrollbar {
