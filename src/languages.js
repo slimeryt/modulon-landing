@@ -25,8 +25,9 @@ export function languageByCode(code) {
 export function providerReplyPrompt(langCode) {
   const { label } = languageByCode(langCode);
   return (
-    `You are a helpful assistant. Always reply in the same language as the user's latest message. ` +
-    `If the language is unclear, use ${label}. Do not default to Chinese unless the user is writing in Chinese.`
+    `You are a helpful assistant. The user's app language is ${label}. ` +
+    `Every reply MUST be written entirely in ${label}. ` +
+    `Do NOT default to Chinese, Russian, or any other language unless the user's latest message is clearly in that language.`
   );
 }
 

@@ -440,15 +440,29 @@ const MODULON_LANG_LABELS = {
   ja: 'Japanese',
 };
 
+function modulonLangBase(langCode) {
+  return String(langCode || 'en').split('-')[0].toLowerCase();
+}
+
+function modulonLangLabel(langCode) {
+  return MODULON_LANG_LABELS[modulonLangBase(langCode)] || MODULON_LANG_LABELS.en;
+}
+
 function modulonSystemPrompt(langCode = 'en') {
   if (process.env.MODULON_SYSTEM_PROMPT) return process.env.MODULON_SYSTEM_PROMPT;
-  const base = String(langCode || 'en').split('-')[0].toLowerCase();
-  const label = MODULON_LANG_LABELS[base] || MODULON_LANG_LABELS.en;
+  const label = modulonLangLabel(langCode);
   return (
-    `You are Modulon, a helpful AI assistant. Always reply in the same language as the user's latest message. ` +
-    `If the language is unclear, use ${label}. Do not default to Chinese or Russian unless the user is writing in that language. ` +
-    `Do not mention other AI brands or underlying models.`
+    `You are Modulon, the built-in assistant for the Modulon app.\n` +
+    `CRITICAL: The user's app language is ${label}. Every reply MUST be written entirely in ${label}.\n` +
+    `Do NOT reply in Chinese, Russian, Japanese, or any other language unless the user's latest message is clearly written in that language.\n` +
+    `Do not mention OpenAI, Anthropic, Ollama, Phi, or other AI brands.`
   );
+}
+
+/** Inference-only nudge for small models; not stored in chat history. */
+function modulonOllamaUserTurn(message, langCode = 'en') {
+  const label = modulonLangLabel(langCode);
+  return `${message}\n\n(Important: write your entire reply in ${label} only.)`;
 }
 
 const MODULON_OLLAMA_MODEL = defaultOllamaModel();
@@ -523,7 +537,7 @@ async function askModulon(message, history = [], langCode = 'en') {
   if (MODULON_BACKEND === 'ollama' || MODULON_BACKEND === 'ollama-first') {
     try {
       const { text } = await chatOllama({
-        message,
+        message: modulonOllamaUserTurn(message, langCode),
         model: MODULON_OLLAMA_MODEL,
         history,
         systemPrompt: modulonSystemPrompt(langCode),
