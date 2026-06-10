@@ -31,6 +31,7 @@ import { useAuth, mapAuthError } from './AuthContext';
 import { useLanguage } from './LanguageContext';
 import { providerReplyPrompt } from './languages';
 import ChatMessageContent from './ChatMessageContent';
+import { formatSidebarChatTitle, isSidebarTitleTruncated } from './chatTitle';
 import { useTheme } from './ThemeContext';
 import { translatedHomeGreeting } from './i18n/homeGreeting';
 import modulonIcon from './assets/icons/Modulon_Icon.png';
@@ -625,7 +626,12 @@ export default function DesktopChatPage() {
                     :'border border-transparent hover:bg-zinc-100/90 dark:hover:bg-white/[0.05]'
                 }`}
               >
-                <p className="text-sm text-zinc-800 dark:text-white/90 line-clamp-2 leading-snug">{c.title}</p>
+                <p
+                  className="truncate text-sm leading-snug text-zinc-800 dark:text-white/90"
+                  title={isSidebarTitleTruncated(c.title) ? c.title : undefined}
+                >
+                  {formatSidebarChatTitle(c.title)}
+                </p>
                 <button
                   type="button"
                   onClick={(e)=>deleteConversation(c.id,e)}
