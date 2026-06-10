@@ -518,7 +518,60 @@ const OLLAMA_STOP_SEQUENCES = [
   'Document Content Summary',
 ];
 
-function sanitizeModulonReply(raw, userMessage = '') {
+const SIMPLE_GREETING_RE = new RegExp(
+  '^(' +
+    'hi|hello|hey|howdy|yo|sup|hiya|' +
+    'good\\s+(morning|afternoon|evening|night)|' +
+    'how\\s+are\\s+you(?:\\s+doing)?|' +
+    'how(?:\'s|\\s+is)\\s+it\\s+going|' +
+    'what(?:\'s|\\s+is)\\s+up' +
+  ')(?:\\s+there)?[\\s!?.]*$',
+  'i',
+);
+
+const IDENTITY_LEAK_RE =
+  /\b(as an? |i'?m an? )?(ai|artificial intelligence|language model|large language model|chatbot|virtual assistant)\b|\b(developed|created|made) by (microsoft|openai|google|anthropic|meta)\b|\bmicrosoft'?s?\b.*\b(ai|copilot|assistant)\b|\b(copilot|chatgpt|gemini|claude|phi-?3)\b|\bmy purpose is to (assist|help)\b/i;
+
+const GREETING_REPLIES = {
+  en: [
+    "Hey! I'm doing well — what can I help you with?",
+    "Hello! Good to hear from you. What's on your mind?",
+    "Hi there! How can I help today?",
+  ],
+  de: ['Hallo! Wie kann ich dir heute helfen?', 'Hi! Schön von dir zu hören — was kann ich für dich tun?'],
+  es: ['¡Hola! ¿En qué puedo ayudarte hoy?', '¡Hola! ¿Qué tienes en mente?'],
+  fr: ['Salut ! Comment puis-je t’aider aujourd’hui ?', 'Bonjour ! De quoi as-tu besoin ?'],
+  pt: ['Olá! Como posso ajudar hoje?', 'Oi! Em que posso ajudar?'],
+  zh: ['你好！今天我能帮你什么？', '嗨！有什么我可以帮你的吗？'],
+  ja: ['こんにちは！今日は何をお手伝いしましょうか？', 'やあ！何かお手伝いできることはありますか？'],
+};
+
+function isSimpleGreeting(message) {
+  const t = String(message || '').trim();
+  if (!t || t.length > 48) return false;
+  return SIMPLE_GREETING_RE.test(t);
+}
+
+function modulonGreetingReply(langCode = 'en') {
+  const base = modulonLangBase(langCode);
+  const pool = GREETING_REPLIES[base] || GREETING_REPLIES.en;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function containsIdentityLeak(text) {
+  return IDENTITY_LEAK_RE.test(String(text || ''));
+}
+
+function rewriteIdentityLeaks(text, userMessage, langCode = 'en') {
+  if (!containsIdentityLeak(text)) return text;
+  if (isSimpleGreeting(userMessage)) return modulonGreetingReply(langCode);
+  const sentences = String(text).split(/(?<=[.!?])\s+/);
+  const cleaned = sentences.filter((s) => !containsIdentityLeak(s)).join(' ').trim();
+  if (cleaned) return cleaned;
+  return "I'm here to help — what would you like to talk about?";
+}
+
+function sanitizeModulonReply(raw, userMessage = '', langCode = 'en') {
   let text = String(raw || '').replace(/<\|[^|>]*\|>/gi, '').trim();
   if (!text) return '';
 
@@ -533,7 +586,8 @@ function sanitizeModulonReply(raw, userMessage = '') {
     text = text.replace(new RegExp(`^${escaped}\\s*`, 'i'), '').trim();
   }
 
-  return text.replace(/\n{3,}/g, '\n\n').trim();
+  text = text.replace(/\n{3,}/g, '\n\n').trim();
+  return rewriteIdentityLeaks(text, userMessage, langCode);
 }
 
 function modulonSystemPrompt(langCode = 'en', personalization = '', thinkMode = false) {
@@ -544,7 +598,9 @@ function modulonSystemPrompt(langCode = 'en', personalization = '', thinkMode = 
     `CRITICAL: The user's app language is ${label}. Every reply MUST be written entirely in ${label}.\n` +
     `Do NOT reply in Chinese, Russian, Japanese, or any other language unless the user's latest message is clearly written in that language.\n` +
     `Never say you are an AI, artificial intelligence, language model, or bot. Speak naturally as Modulon.\n` +
-    `Do not mention OpenAI, Anthropic, Ollama, Phi, or other AI brands.\n` +
+    `You are NOT Microsoft Copilot, NOT Phi, NOT ChatGPT, and NOT made by Microsoft or any other company.\n` +
+    `Never say you were developed by Microsoft, OpenAI, Google, or anyone else. You are Modulon only.\n` +
+    `Do not mention OpenAI, Anthropic, Ollama, Phi, Microsoft, or other AI brands.\n` +
     `Reply only to the user's latest message. Never repeat their message back.\n` +
     `For greetings and small talk, answer in one or two short, friendly sentences.\n` +
     `Never invent assignments, essays, tables, document analyses, or follow-up tasks. Stop when your answer is complete.`;
@@ -563,7 +619,10 @@ function modulonSystemPrompt(langCode = 'en', personalization = '', thinkMode = 
 /** Inference-only nudge for small models; not stored in chat history. */
 function modulonOllamaUserTurn(message, langCode = 'en') {
   const label = modulonLangLabel(langCode);
-  return `${message}\n\n(Important: write your entire reply in ${label} only.)`;
+  return (
+    `${message}\n\n` +
+    `(Reply as Modulon only — not Microsoft, not an AI. Write your entire reply in ${label} only.)`
+  );
 }
 
 const MODULON_OLLAMA_MODEL = defaultOllamaModel();
@@ -635,8 +694,13 @@ async function chatOllama({ message, model, history = [], systemPrompt, baseUrl,
 
 /** Modulon M0.1 — uses local Ollama by default; falls back to the GPT-2 bridge. */
 async function askModulon(message, history = [], langCode = 'en', personalization = '', thinkMode = false) {
+  if (!thinkMode && isSimpleGreeting(message)) {
+    const reply = modulonGreetingReply(langCode);
+    return { reply, thinking: '', proto: false, inputTokens: 0, outputTokens: 0 };
+  }
+
   if (MODULON_BACKEND === 'python') {
-    const reply = await askPython(message);
+    const reply = sanitizeModulonReply(await askPython(message), message, langCode) || '…';
     return { reply, thinking: '', proto: false, inputTokens: 0, outputTokens: 0 };
   }
 
@@ -650,8 +714,8 @@ async function askModulon(message, history = [], langCode = 'en', personalizatio
         thinkMode,
       });
       const parsed = thinkMode ? parseThinkResponse(text) : { thinking: '', reply: text || '…' };
-      const reply = sanitizeModulonReply(parsed.reply, message) || '…';
-      const thinking = sanitizeModulonReply(parsed.thinking, message);
+      const reply = sanitizeModulonReply(parsed.reply, message, langCode) || '…';
+      const thinking = sanitizeModulonReply(parsed.thinking, message, langCode);
       return {
         reply,
         thinking,
@@ -669,7 +733,7 @@ async function askModulon(message, history = [], langCode = 'en', personalizatio
   }
 
   try {
-    const reply = await askPython(message);
+    const reply = sanitizeModulonReply(await askPython(message), message, langCode) || '…';
     return { reply, thinking: '', proto: false, inputTokens: 0, outputTokens: 0 };
   } catch (err) {
     return { reply: `⚠ ${err.message}`, thinking: '', proto: true, inputTokens: 0, outputTokens: 0 };
