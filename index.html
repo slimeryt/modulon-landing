@@ -20,6 +20,19 @@
             document.body.classList.toggle('dark', dark);
           }
         } catch (e) {}
+        try {
+          var motion = localStorage.getItem('modulon-reduced-motion');
+          var density = localStorage.getItem('modulon-chat-density');
+          var reduced = false;
+          if (motion === 'reduce') reduced = true;
+          else if (motion === 'full') reduced = false;
+          else reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+          document.documentElement.setAttribute('data-reduced-motion', reduced ? 'true' : 'false');
+          document.documentElement.setAttribute(
+            'data-chat-density',
+            density === 'compact' ? 'compact' : 'comfortable'
+          );
+        } catch (e) {}
       })();
     </script>
     <meta charset="UTF-8" />

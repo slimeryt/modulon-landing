@@ -55,6 +55,7 @@ export const CATALOG = {
   'chat.greeting.default': 'What can I help you with?',
   'chat.homeHint': 'Type a message below to start a new conversation.',
   'chat.thinking': 'Modulon is thinking…',
+  'chat.thinkingDeep': 'Modulon is thinking deeply…',
   'chat.messagePlaceholder': 'Message Modulon…',
   'chat.typeMessage': 'Type a message…',
   'chat.loadingMessages': 'Loading messages…',

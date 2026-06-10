@@ -14,15 +14,12 @@ import {
   Key,
   LogOut,
   MessageCircle,
-  Monitor,
-  Moon,
   PanelLeft,
   Palette,
   Plus,
   Send,
   Settings,
   Shield,
-  Sun,
   Trash2,
   User,
   X,
@@ -34,8 +31,15 @@ import ChatMessageContent from './ChatMessageContent';
 import { MessageTokenCounter } from './MessageTokenCounter';
 import { formatSidebarChatTitle, isSidebarTitleTruncated } from './chatTitle';
 import { useGenieMenu } from './useGenieMenu';
+import PersonalizationSettings from './PersonalizationSettings';
+import ChatMemoryToggle from './ChatMemoryToggle';
+import ThinkModeToggle from './ThinkModeToggle';
+import AssistantThinking from './AssistantThinking';
+import { readThinkMode, writeThinkMode } from './modulonThinkMode';
+import { parseThinkResponse, THINK_MODE_SYSTEM_HINT } from './parseThinkResponse';
+import { readPersonalization, readPersonalizationStored } from './modulonPersonalization';
 import { modelPickerItemClass } from './modelPickerMenu';
-import { useTheme } from './ThemeContext';
+import AppearanceSettings from './AppearanceSettings';
 import { translatedHomeGreeting } from './i18n/homeGreeting';
 import modulonIcon from './assets/icons/Modulon_Icon.png';
 
@@ -210,6 +214,7 @@ function mapRowsToMessages(rows) {
     id:m.id,
     role:m.role,
     text:m.body,
+    thinking:m.thinking||'',
     prototype:!!m.prototype,
     createdAt:m.created_at,
     inputTokens:m.input_tokens??0,
@@ -217,8 +222,17 @@ function mapRowsToMessages(rows) {
   }));
 }
 
-async function callProviderApi(provider,modelId,apiKey,priorMessages,newText,replyLanguage='en'){
-  const systemPrompt=providerReplyPrompt(replyLanguage);
+function providerResult(rawText, thinkMode, usage = {}) {
+  if (thinkMode) {
+    const { thinking, reply } = parseThinkResponse(rawText);
+    return { text: reply, thinking, ...usage };
+  }
+  return { text: rawText, thinking: '', ...usage };
+}
+
+async function callProviderApi(provider,modelId,apiKey,priorMessages,newText,replyLanguage='en',thinkMode=false){
+  let systemPrompt=providerReplyPrompt(replyLanguage);
+  if (thinkMode) systemPrompt += `\n\n${THINK_MODE_SYSTEM_HINT}`;
   const history=priorMessages.filter(m=>!m.error&&(m.role==='user'||m.role==='assistant')).map(m=>({role:m.role,content:m.text}));
   const userTurn={role:'user',content:newText};
   if(provider==='openai'||provider==='xai'||provider==='deepseek'){
@@ -226,19 +240,19 @@ async function callProviderApi(provider,modelId,apiKey,priorMessages,newText,rep
     const res=await fetch(ep[provider],{method:'POST',headers:{'Authorization':`Bearer ${apiKey}`,'Content-Type':'application/json'},body:JSON.stringify({model:modelId,messages:[{role:'system',content:systemPrompt},...history,userTurn]})});
     if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`${provider} error ${res.status}`);}
     const d=await res.json();
-    return{text:d.choices?.[0]?.message?.content??'',inputTokens:d.usage?.prompt_tokens??0,outputTokens:d.usage?.completion_tokens??0};
+    return providerResult(d.choices?.[0]?.message?.content??'',thinkMode,{inputTokens:d.usage?.prompt_tokens??0,outputTokens:d.usage?.completion_tokens??0});
   }
   if(provider==='anthropic'){
     const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','content-type':'application/json'},body:JSON.stringify({model:modelId,max_tokens:2048,system:systemPrompt,messages:[...history,userTurn]})});
     if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`Anthropic error ${res.status}`);}
     const d=await res.json();
-    return{text:d.content?.[0]?.text??'',inputTokens:d.usage?.input_tokens??0,outputTokens:d.usage?.output_tokens??0};
+    return providerResult(d.content?.[0]?.text??'',thinkMode,{inputTokens:d.usage?.input_tokens??0,outputTokens:d.usage?.output_tokens??0});
   }
   if(provider==='google'){
     const res=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({systemInstruction:{parts:[{text:systemPrompt}]},contents:[...history,userTurn].map(m=>({role:m.role==='assistant'?'model':'user',parts:[{text:m.content}]}))})});
     if(!res.ok){const e=await res.json().catch(()=>({}));throw new Error(e?.error?.message||`Google error ${res.status}`);}
     const d=await res.json();
-    return{text:d.candidates?.[0]?.content?.parts?.[0]?.text??'',inputTokens:d.usageMetadata?.promptTokenCount??0,outputTokens:d.usageMetadata?.candidatesTokenCount??0};
+    return providerResult(d.candidates?.[0]?.content?.parts?.[0]?.text??'',thinkMode,{inputTokens:d.usageMetadata?.promptTokenCount??0,outputTokens:d.usageMetadata?.candidatesTokenCount??0});
   }
   throw new Error(`Unknown provider: ${provider}`);
 }
@@ -246,7 +260,6 @@ async function callProviderApi(provider,modelId,apiKey,priorMessages,newText,rep
 // ─────────────────────────────────────────────────────────────────────────────
 export default function DesktopChatPage() {
   const { firebaseConfigured, user, signOutUser, sendPasswordReset } = useAuth();
-  const { theme, setTheme }  = useTheme();
   const { t, language }      = useLanguage();
 
   const [conversations,    setConversations]    = useState([]);
@@ -267,13 +280,28 @@ export default function DesktopChatPage() {
   const [attachMenuPos,    setAttachMenuPos]    = useState(null);
   const [modelMenuOpen,    setModelMenuOpen]    = useState(false);
   const [modelMenuPos,     setModelMenuPos]     = useState(null);
-  const { menuMounted: modelMenuMounted, menuClass: modelMenuAnimClass, onMenuAnimationEnd: onModelMenuAnimationEnd } = useGenieMenu(modelMenuOpen);
+  const modelSelectMenuRef = useRef(null);
+  const {
+    menuMounted: modelMenuMounted,
+    menuClass: modelMenuAnimClass,
+    panelRef: modelMenuPanelRef,
+  } = useGenieMenu(modelMenuOpen);
+
+  const onModelMenuRef = useCallback(
+    (node) => {
+      modelSelectMenuRef.current = node;
+      modelMenuPanelRef(node);
+    },
+    [modelMenuPanelRef],
+  );
+
   const [contextMenu,      setContextMenu]      = useState(null);
   const [dailyUsage,       setDailyUsage]       = useState(() => readDailyUsage());
   const [weeklyUsage,      setWeeklyUsage]      = useState(() => readWeeklyUsage());
   const [extraUsage,       setExtraUsage]       = useState(() => readExtraUsage());
   const [extraUsageCredits,setExtraUsageCredits]= useState(() => readExtraUsageCredits());
   const [apiKeys,         setApiKeys]         = useState(() => readApiKeys());
+  const [personalization, setPersonalization] = useState(() => readPersonalizationStored());
   const [apiKeyDrafts,    setApiKeyDrafts]     = useState(() => readApiKeys());
   const [apiKeysVisible,  setApiKeysVisible]   = useState({anthropic:false,openai:false,google:false,xai:false,deepseek:false});
   const [selectedModel,   setSelectedModel]    = useState({id:'modulon',label:MODULON_CHAT_MODEL_LABEL,provider:'modulon'});
@@ -286,7 +314,6 @@ export default function DesktopChatPage() {
   const attachControlsRef  = useRef(null);
   const attachMenuRef      = useRef(null);
   const modelPickerBtnRef  = useRef(null);
-  const modelSelectMenuRef = useRef(null);
   const textareaRef        = useRef(null);
 
   // ── Data ──────────────────────────────────────────────────────────────────
@@ -295,6 +322,9 @@ export default function DesktopChatPage() {
     const token = user ? await user.getIdToken() : null;
     return apiJson(path, opts, token);
   }, [user]);
+
+  const [chatMemoryEnabled, setChatMemoryEnabled] = useState(true);
+  const [thinkMode, setThinkMode] = useState(() => readThinkMode());
 
   const refreshConversations = useCallback(async () => {
     setLoadingList(true);
@@ -334,6 +364,19 @@ export default function DesktopChatPage() {
 
   useEffect(()=>{ if(apiOk===true) refreshConversations(); }, [apiOk, refreshConversations]);
   useEffect(()=>{ if(conversationId) loadMessages(conversationId); }, [conversationId, loadMessages]);
+  useEffect(()=>{
+    if(!conversationId){ setChatMemoryEnabled(true); return; }
+    const convo=conversations.find(c=>c.id===conversationId);
+    if(convo) setChatMemoryEnabled(convo.memory_enabled!==0);
+  }, [conversationId, conversations]);
+  const onChatMemoryChange=useCallback(async(next)=>{
+    setChatMemoryEnabled(next);
+    if(!conversationId)return;
+    try{
+      await callApi(`/chat/conversations/${conversationId}`,{method:'PATCH',body:{memoryEnabled:next}});
+      setConversations(prev=>prev.map(c=>c.id===conversationId?{...c,memory_enabled:next?1:0}:c));
+    }catch{/* local toggle still applies */}
+  }, [conversationId, callApi]);
   useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}); }, [messages, sending]);
 
   useEffect(()=>{
@@ -517,10 +560,11 @@ export default function DesktopChatPage() {
       if(selectedModel.provider!=='modulon'){
         const apiKey=apiKeys[selectedModel.provider];
         if(!apiKey)throw new Error(`No API key saved for ${selectedModel.label}. Add one in Settings → API Keys.`);
-        const result=await callProviderApi(selectedModel.provider,selectedModel.id,apiKey,messages,text,language);
+        const prior=chatMemoryEnabled?messages:[];
+        const result=await callProviderApi(selectedModel.provider,selectedModel.id,apiKey,prior,text,language,thinkMode);
         const inTok=result.inputTokens||Math.ceil(text.length/4);
         const outTok=result.outputTokens||Math.ceil(result.text.length/4);
-        const data=await callApi('/chat',{method:'POST',body:{message:text,conversationId,external:true,assistantReply:result.text,inputTokens:inTok,outputTokens:outTok}});
+        const data=await callApi('/chat',{method:'POST',body:{message:text,conversationId,chatMemory:chatMemoryEnabled,thinkMode,external:true,assistantReply:result.text,assistantThinking:result.thinking||undefined,inputTokens:inTok,outputTokens:outTok}});
         const convId=data.conversationId;
         if(convId)setConversationId(convId);
         await refreshConversations();
@@ -529,7 +573,8 @@ export default function DesktopChatPage() {
         const cost=calcCost(selectedModel.id,inTok,outTok);
         bumpDailyCost(cost); bumpWeeklyCost(cost);
       } else {
-        const data=await callApi('/chat',{method:'POST',body:{message:text,conversationId,language}});
+        const pers=readPersonalization();
+        const data=await callApi('/chat',{method:'POST',body:{message:text,conversationId,language,chatMemory:chatMemoryEnabled,thinkMode,...(pers?{personalization:pers}:{})}});
         const cid=data.conversationId;
         if(cid)setConversationId(cid);
         await refreshConversations();
@@ -551,7 +596,12 @@ export default function DesktopChatPage() {
   const openConvoFromMenu      = useCallback(()=>{ if(!contextMenu?.conversationId)return; setErr(''); setConversationId(contextMenu.conversationId); closeContextMenu(); }, [contextMenu, closeContextMenu]);
   const copyConvoTitleFromMenu = useCallback(async()=>{ if(!contextMenu?.conversationId)return; const c=conversations.find(x=>x.id===contextMenu.conversationId); if(c?.title)try{await navigator.clipboard.writeText(c.title);}catch{} closeContextMenu(); }, [contextMenu, conversations, closeContextMenu]);
   const deleteConvoFromMenu    = useCallback(async()=>{ const id=contextMenu?.conversationId; if(!id)return; setErr(''); try{await callApi(`/chat/conversations/${id}`,{method:'DELETE'});await refreshConversations();if(conversationId===id){setConversationId(null);setMessages([]);}}catch(ex){setErr(ex.message||String(ex));} closeContextMenu(); }, [contextMenu, conversationId, refreshConversations, closeContextMenu, callApi]);
-  const openSettingsFromMenu   = useCallback(()=>{ setSettingsNotice(''); setSettingsSection('appearance'); setSettingsOpen(true); closeContextMenu(); }, [closeContextMenu]);
+  const openSettingsFromMenu = useCallback(() => {
+    setSettingsNotice('');
+    setSettingsSection('appearance');
+    setSettingsOpen(true);
+    closeContextMenu();
+  }, [closeContextMenu]);
 
   const isHome = !conversationId && messages.length === 0 && apiOk !== false;
 
@@ -677,7 +727,7 @@ export default function DesktopChatPage() {
             </div>
             <button
               type="button"
-              onClick={()=>{ setSettingsNotice(''); setSettingsSection('account'); setSettingsOpen(true); }}
+              onClick={() => { setSettingsNotice(''); setSettingsSection('account'); setSettingsOpen(true); }}
               className={`sidebar-settings-btn flex shrink-0 items-center rounded-full text-zinc-500 hover:bg-zinc-200/80 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40 dark:text-white/40 dark:hover:bg-white/[0.1] dark:hover:text-white/75 dark:focus-visible:ring-white/25 ${sidebarOpen?'':'hidden'}`}
               aria-label="Open settings"
             >
@@ -695,7 +745,7 @@ export default function DesktopChatPage() {
               <span className={`text-xs font-medium text-zinc-600 dark:text-white/50 ${sidebarOpen?'':'sr-only'}`}>Display</span>
               <button
                 type="button"
-                onClick={()=>{ setSettingsNotice(''); setSettingsSection('appearance'); setSettingsOpen(true); }}
+                onClick={() => { setSettingsNotice(''); setSettingsSection('appearance'); setSettingsOpen(true); }}
                 className="shrink-0 rounded-full p-2.5 text-zinc-500 transition-colors hover:bg-zinc-200/80 hover:text-zinc-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/40 dark:text-white/45 dark:hover:bg-white/[0.08] dark:hover:text-white dark:focus-visible:ring-white/25"
                 aria-label="Theme and display settings"
               >
@@ -745,11 +795,11 @@ export default function DesktopChatPage() {
                 </div>
                 {sending && (
                   <div className="flex w-full max-w-md justify-start">
-                    <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-zinc-200/90 bg-white px-4 py-3 text-sm text-zinc-500 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/40">
+                    <div className="chat-bubble flex items-center gap-2 rounded-2xl rounded-bl-md border border-zinc-200/90 bg-white text-sm text-zinc-500 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/40">
                       <span className="inline-flex gap-1">
                         {[0,150,300].map(d=><span key={d} className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 dark:bg-white/40" style={{animationDelay:`${d}ms`}}/>)}
                       </span>
-                      {t('chat.thinking')}
+                      {thinkMode?t('chat.thinkingDeep'):t('chat.thinking')}
                     </div>
                   </div>
                 )}
@@ -758,11 +808,12 @@ export default function DesktopChatPage() {
           ) : (
             <>
               {loadingMessages&&conversationId&&<p className="mb-2 text-xs text-zinc-500 dark:text-white/35">{t('chat.loadingMessages')}</p>}
-              <div className="no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto pb-4">
+              <div className="chat-messages no-scrollbar min-h-0 flex-1 overflow-y-auto pb-4">
                 {messages.map(msg=>(
                   <div key={msg.id} className={`flex ${msg.role==='user'?'justify-end':'justify-start'}`}>
                     <div className={`max-w-[85%] ${msg.role==='assistant'?'flex flex-col':''}`}>
-                      <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                      {msg.role==='assistant'&&msg.thinking?<AssistantThinking thinking={msg.thinking}/>:null}
+                      <div className={`chat-bubble rounded-2xl text-sm leading-relaxed ${
                         msg.role==='user'
                           ?'bg-zinc-900 text-white dark:bg-white dark:text-black rounded-br-md'
                           :msg.error
@@ -780,11 +831,11 @@ export default function DesktopChatPage() {
                 ))}
                 {sending&&(
                   <div className="flex justify-start">
-                    <div className="rounded-2xl rounded-bl-md px-4 py-3 bg-zinc-100 border border-zinc-200/90 text-sm text-zinc-500 flex items-center gap-2 dark:bg-white/[0.04] dark:border-white/[0.06] dark:text-white/40">
+                    <div className="chat-bubble rounded-2xl rounded-bl-md bg-zinc-100 border border-zinc-200/90 text-sm text-zinc-500 flex items-center gap-2 dark:bg-white/[0.04] dark:border-white/[0.06] dark:text-white/40">
                       <span className="inline-flex gap-1">
                         {[0,150,300].map(d=><span key={d} className="w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-white/40 animate-bounce" style={{animationDelay:`${d}ms`}}/>)}
                       </span>
-                      {t('chat.thinking')}
+                      {thinkMode?t('chat.thinkingDeep'):t('chat.thinking')}
                     </div>
                   </div>
                 )}
@@ -800,6 +851,18 @@ export default function DesktopChatPage() {
             className={isHome?'pt-2':'border-t border-zinc-200/80 pt-2 dark:border-white/[0.06]'}
             onSubmit={(e)=>{e.preventDefault();send();}}
           >
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <ChatMemoryToggle
+                enabled={chatMemoryEnabled}
+                onChange={onChatMemoryChange}
+                disabled={sending||apiOk===false}
+              />
+              <ThinkModeToggle
+                enabled={thinkMode}
+                onChange={(next)=>{ setThinkMode(next); writeThinkMode(next); }}
+                disabled={sending||apiOk===false}
+              />
+            </div>
             <div className={`flex w-full items-end gap-0.5 border bg-white transition-shadow focus-within:ring-2 dark:bg-black/35 dark:shadow-none ${
               isHome
                 ?'rounded-2xl border-zinc-300/90 px-3 py-2 shadow-md focus-within:border-zinc-400/90 focus-within:ring-zinc-400/35 dark:border-white/12 dark:focus-within:border-white/22 dark:focus-within:ring-white/15'
@@ -867,10 +930,9 @@ export default function DesktopChatPage() {
                 <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden strokeWidth={2} />
               </button>
               {modelMenuMounted&&modelMenuPos&&(
-                <div ref={modelSelectMenuRef} role="menu" aria-label="Models"
+                <div ref={onModelMenuRef} role="menu" aria-label="Models"
                   className={`fixed z-[80] w-56 overflow-hidden rounded-3xl border border-zinc-200/90 bg-white py-1.5 text-sm shadow-xl dark:border-white/[0.12] dark:bg-[#121214] ${modelMenuAnimClass}`}
-                  style={{left:modelMenuPos.left,bottom:modelMenuPos.bottom}}
-                  onAnimationEnd={onModelMenuAnimationEnd}>
+                  style={{left:modelMenuPos.left,bottom:modelMenuPos.bottom}}>
                   <div className="model-picker-menu__list max-h-72 overflow-y-auto no-scrollbar">
                     <button type="button" role="menuitem"
                       onClick={()=>{setSelectedModel({id:'modulon',label:MODULON_CHAT_MODEL_LABEL,provider:'modulon'});setModelMenuOpen(false);}}
@@ -959,32 +1021,20 @@ export default function DesktopChatPage() {
                           <p className="truncate text-base font-medium text-zinc-900 dark:text-white sm:text-lg">{accountDisplayName(user)}</p>
                           <p className="mt-0.5 truncate font-mono text-xs text-zinc-500 dark:text-white/40 sm:text-sm">{user.email}</p>
                         </div>
+                        <button type="button"
+                          onClick={()=>setSignOutConfirmOpen(true)}
+                          aria-label="Sign out"
+                          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-800 hover:bg-red-500/15 dark:text-red-200/90 sm:px-4 sm:py-2.5">
+                          <LogOut className="h-4 w-4" aria-hidden />
+                          <span className="hidden sm:inline">Sign out</span>
+                        </button>
                       </div>
                     </div>
-                    <div className="flex justify-center">
-                      <button type="button"
-                        onClick={()=>setSignOutConfirmOpen(true)}
-                        className="inline-flex items-center justify-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-medium text-red-800 hover:bg-red-500/15 dark:text-red-200/90">
-                        <LogOut className="h-4 w-4" aria-hidden />Sign out
-                      </button>
-                    </div>
+                    <PersonalizationSettings value={personalization} onChange={setPersonalization} />
                   </div>
                 )}
 
-                {settingsSection==='appearance'&&(
-                  <div className="max-w-lg space-y-4">
-                    <p className="text-[10px] font-medium uppercase tracking-widest text-zinc-500 dark:text-white/35">Color theme</p>
-                    <p className="text-sm leading-relaxed text-zinc-600 dark:text-white/45">Choose how Modulon looks. &ldquo;System&rdquo; follows your device light or dark mode.</p>
-                    <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Color theme">
-                      {[{id:'dark',label:'Dark',Icon:Moon},{id:'light',label:'Light',Icon:Sun},{id:'system',label:'System',Icon:Monitor}].map(({id,label,Icon})=>(
-                        <button key={id} type="button" role="radio" aria-checked={theme===id} onClick={()=>setTheme(id)}
-                          className={`inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium transition-colors ${theme===id?'border-zinc-900 bg-zinc-900 text-white dark:border-white/25 dark:bg-white/[0.14] dark:text-white':'border-zinc-300/90 text-zinc-700 hover:bg-zinc-100 dark:border-white/15 dark:text-white/75 dark:hover:bg-white/[0.06]'}`}>
-                          <Icon className="h-4 w-4 shrink-0 opacity-90" aria-hidden />{label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {settingsSection==='appearance'&&<AppearanceSettings />}
 
                 {settingsSection==='security'&&user&&(
                   <div className="max-w-lg space-y-4">

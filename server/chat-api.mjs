@@ -189,7 +189,7 @@ app.use(cors({
     if (process.env.NODE_ENV !== 'production') return cb(null, true);
     cb(null, false);
   },
-  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(express.json());
@@ -221,14 +221,17 @@ try { db.exec(`ALTER TABLE conversations ADD COLUMN user_id TEXT`); } catch {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_convos_user ON conversations(user_id)`); } catch {}
 try { db.exec(`ALTER TABLE messages ADD COLUMN input_tokens INTEGER DEFAULT 0`); } catch {}
 try { db.exec(`ALTER TABLE messages ADD COLUMN output_tokens INTEGER DEFAULT 0`); } catch {}
+try { db.exec(`ALTER TABLE conversations ADD COLUMN memory_enabled INTEGER NOT NULL DEFAULT 1`); } catch {}
+try { db.exec(`ALTER TABLE messages ADD COLUMN thinking TEXT`); } catch {}
 
 const q = {
-  listConvos:   db.prepare(`SELECT id,title,created_at,updated_at FROM conversations WHERE user_id IS ? ORDER BY updated_at DESC LIMIT 100`),
-  getConvo:     db.prepare(`SELECT id,user_id FROM conversations WHERE id=?`),
-  insertConvo:  db.prepare(`INSERT INTO conversations (id,title,user_id) VALUES (?,?,?)`),
+  listConvos:   db.prepare(`SELECT id,title,created_at,updated_at,COALESCE(memory_enabled,1) AS memory_enabled FROM conversations WHERE user_id IS ? ORDER BY updated_at DESC LIMIT 100`),
+  getConvo:     db.prepare(`SELECT id,user_id,COALESCE(memory_enabled,1) AS memory_enabled FROM conversations WHERE id=?`),
+  insertConvo:  db.prepare(`INSERT INTO conversations (id,title,user_id,memory_enabled) VALUES (?,?,?,?)`),
+  updateConvoMemory: db.prepare(`UPDATE conversations SET memory_enabled=? WHERE id=?`),
   deleteConvo:  db.prepare(`DELETE FROM conversations WHERE id=?`),
-  listMessages: db.prepare(`SELECT id,role,body,prototype,created_at,input_tokens,output_tokens FROM messages WHERE conversation_id=? ORDER BY created_at ASC`),
-  insertMsg:    db.prepare(`INSERT INTO messages (id,conversation_id,role,body,prototype,input_tokens,output_tokens) VALUES (?,?,?,?,?,?,?)`),
+  listMessages: db.prepare(`SELECT id,role,body,prototype,created_at,input_tokens,output_tokens,thinking FROM messages WHERE conversation_id=? ORDER BY created_at ASC`),
+  insertMsg:    db.prepare(`INSERT INTO messages (id,conversation_id,role,body,prototype,input_tokens,output_tokens,thinking) VALUES (?,?,?,?,?,?,?,?)`),
   msgCount:     db.prepare(`SELECT COUNT(*) as n FROM messages WHERE conversation_id=?`),
   updateTitle:  db.prepare(`UPDATE conversations SET title=? WHERE id=?`),
   touchConvo:   db.prepare(`UPDATE conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?`),
@@ -395,6 +398,21 @@ app.delete('/api/chat/conversations/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+app.patch('/api/chat/conversations/:id', async (req, res) => {
+  const uid = await extractUserId(req);
+  if (FIREBASE_CONFIGURED && !uid) return res.status(401).json({ error: 'Unauthorized' });
+  const convo = q.getConvo.get(req.params.id);
+  if (!convo) return res.status(404).json({ error: 'Not found' });
+  if (FIREBASE_CONFIGURED && uid && convo.user_id && convo.user_id !== uid)
+    return res.status(403).json({ error: 'Forbidden' });
+  const { memoryEnabled } = req.body ?? {};
+  if (typeof memoryEnabled !== 'boolean') {
+    return res.status(400).json({ error: 'memoryEnabled must be a boolean' });
+  }
+  q.updateConvoMemory.run(memoryEnabled ? 1 : 0, req.params.id);
+  res.json({ ok: true, memoryEnabled });
+});
+
 app.post('/api/chat/conversations/:id/messages', async (req, res) => {
   const uid = await extractUserId(req);
   if (FIREBASE_CONFIGURED && !uid) return res.status(401).json({ error: 'Unauthorized' });
@@ -412,7 +430,7 @@ app.post('/api/chat/conversations/:id/messages', async (req, res) => {
   const countBefore = q.msgCount.get(req.params.id).n;
   const inTok = Math.max(0, Number(req.body?.inputTokens) || 0);
   const outTok = Math.max(0, Number(req.body?.outputTokens) || 0);
-  q.insertMsg.run(crypto.randomUUID(), req.params.id, role, body, prototype ? 1 : 0, inTok, outTok);
+  q.insertMsg.run(crypto.randomUUID(), req.params.id, role, body, prototype ? 1 : 0, inTok, outTok, null);
   q.touchConvo.run(req.params.id);
 
   if (countBefore === 0 && role === 'user') {
@@ -452,15 +470,50 @@ function modulonLangLabel(langCode) {
   return MODULON_LANG_LABELS[modulonLangBase(langCode)] || MODULON_LANG_LABELS.en;
 }
 
-function modulonSystemPrompt(langCode = 'en') {
+const PERSONALIZATION_MAX_CHARS = 500;
+
+function sanitizePersonalization(raw) {
+  if (typeof raw !== 'string') return '';
+  return raw
+    .replace(/\r\n/g, '\n')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+    .trim()
+    .slice(0, PERSONALIZATION_MAX_CHARS);
+}
+
+const THINK_MODE_SYSTEM_HINT =
+  'Think mode is ON. First write brief private reasoning inside <thinking>...</thinking> tags. ' +
+  'Then write the user-facing answer after the closing tag only — no preamble or repeat of the reasoning.';
+
+function parseThinkResponse(text) {
+  const raw = String(text || '');
+  const match = raw.match(/<thinking>([\s\S]*?)<\/thinking>/i);
+  if (!match) {
+    return { thinking: '', reply: raw.trim() };
+  }
+  const thinking = match[1].trim();
+  const reply = raw.replace(/<thinking>[\s\S]*?<\/thinking>/i, '').trim();
+  return { thinking, reply: reply || thinking };
+}
+
+function modulonSystemPrompt(langCode = 'en', personalization = '', thinkMode = false) {
   if (process.env.MODULON_SYSTEM_PROMPT) return process.env.MODULON_SYSTEM_PROMPT;
   const label = modulonLangLabel(langCode);
-  return (
+  let base =
     `You are Modulon, the built-in assistant for the Modulon app.\n` +
     `CRITICAL: The user's app language is ${label}. Every reply MUST be written entirely in ${label}.\n` +
     `Do NOT reply in Chinese, Russian, Japanese, or any other language unless the user's latest message is clearly written in that language.\n` +
     `Never say you are an AI, artificial intelligence, language model, or bot. Speak naturally as Modulon.\n` +
-    `Do not mention OpenAI, Anthropic, Ollama, Phi, or other AI brands.`
+    `Do not mention OpenAI, Anthropic, Ollama, Phi, or other AI brands.`;
+  if (thinkMode) {
+    base += `\n\n${THINK_MODE_SYSTEM_HINT}`;
+  }
+  const extra = sanitizePersonalization(personalization);
+  if (!extra) return base;
+  return (
+    `${base}\n\n` +
+    `The user set personalization preferences below. Follow them when they do not conflict with the rules above.\n` +
+    `Personalization:\n${extra}`
   );
 }
 
@@ -500,13 +553,15 @@ function convoHistoryRows(convId) {
     .map((m) => ({ role: m.role, content: m.body }));
 }
 
-async function chatOllama({ message, model, history = [], systemPrompt, baseUrl }) {
+async function chatOllama({ message, model, history = [], systemPrompt, baseUrl, thinkMode = false }) {
   const ollamaBase = resolveOllamaBase(baseUrl);
   const chatMessages = [
     ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
     ...history,
     { role: 'user', content: message },
   ];
+  const defaultPredict = Number(process.env.OLLAMA_NUM_PREDICT || 512);
+  const thinkPredict = Number(process.env.OLLAMA_THINK_NUM_PREDICT || 896);
   const r = await fetch(`${ollamaBase}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -516,7 +571,7 @@ async function chatOllama({ message, model, history = [], systemPrompt, baseUrl 
       stream: false,
       options: {
         num_ctx: Number(process.env.OLLAMA_NUM_CTX || 2048),
-        num_predict: Number(process.env.OLLAMA_NUM_PREDICT || 512),
+        num_predict: thinkMode ? thinkPredict : defaultPredict,
       },
     }),
     signal: AbortSignal.timeout(Number(process.env.OLLAMA_CHAT_TIMEOUT_MS || 180_000)),
@@ -534,10 +589,10 @@ async function chatOllama({ message, model, history = [], systemPrompt, baseUrl 
 }
 
 /** Modulon M0.1 — uses local Ollama by default; falls back to the GPT-2 bridge. */
-async function askModulon(message, history = [], langCode = 'en') {
+async function askModulon(message, history = [], langCode = 'en', personalization = '', thinkMode = false) {
   if (MODULON_BACKEND === 'python') {
     const reply = await askPython(message);
-    return { reply, proto: false, inputTokens: 0, outputTokens: 0 };
+    return { reply, thinking: '', proto: false, inputTokens: 0, outputTokens: 0 };
   }
 
   if (MODULON_BACKEND === 'ollama' || MODULON_BACKEND === 'ollama-first') {
@@ -546,13 +601,21 @@ async function askModulon(message, history = [], langCode = 'en') {
         message: modulonOllamaUserTurn(message, langCode),
         model: MODULON_OLLAMA_MODEL,
         history,
-        systemPrompt: modulonSystemPrompt(langCode),
+        systemPrompt: modulonSystemPrompt(langCode, personalization, thinkMode),
+        thinkMode,
       });
-      return { reply: text || '…', proto: false, inputTokens, outputTokens };
+      const parsed = thinkMode ? parseThinkResponse(text) : { thinking: '', reply: text || '…' };
+      return {
+        reply: parsed.reply || '…',
+        thinking: parsed.thinking,
+        proto: false,
+        inputTokens,
+        outputTokens,
+      };
     } catch (err) {
       console.error('[modulon] Ollama error:', err.message);
       if (MODULON_BACKEND === 'ollama') {
-        return { reply: `⚠ Modulon is temporarily unavailable. (${err.message})`, proto: true, inputTokens: 0, outputTokens: 0 };
+        return { reply: `⚠ Modulon is temporarily unavailable. (${err.message})`, thinking: '', proto: true, inputTokens: 0, outputTokens: 0 };
       }
       console.warn('[modulon] Ollama unavailable, falling back to GPT-2:', err.message);
     }
@@ -560,10 +623,15 @@ async function askModulon(message, history = [], langCode = 'en') {
 
   try {
     const reply = await askPython(message);
-    return { reply, proto: false, inputTokens: 0, outputTokens: 0 };
+    return { reply, thinking: '', proto: false, inputTokens: 0, outputTokens: 0 };
   } catch (err) {
-    return { reply: `⚠ ${err.message}`, proto: true, inputTokens: 0, outputTokens: 0 };
+    return { reply: `⚠ ${err.message}`, thinking: '', proto: true, inputTokens: 0, outputTokens: 0 };
   }
+}
+
+function insertAssistantMsg(convId, body, prototype, inTok, outTok, thinking = '') {
+  const thinkText = thinking?.trim() ? thinking.trim() : null;
+  q.insertMsg.run(crypto.randomUUID(), convId, 'assistant', body, prototype ? 1 : 0, inTok, outTok, thinkText);
 }
 
 app.post('/api/chat', async (req, res) => {
@@ -571,20 +639,34 @@ app.post('/api/chat', async (req, res) => {
     const uid = await extractUserId(req);
     if (FIREBASE_CONFIGURED && !uid) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { message, conversationId, assistantReply, external, language, inputTokens, outputTokens } = req.body ?? {};
+    const {
+      message,
+      conversationId,
+      assistantReply,
+      external,
+      language,
+      inputTokens,
+      outputTokens,
+      personalization,
+      chatMemory,
+      thinkMode,
+      assistantThinking,
+    } = req.body ?? {};
     if (!message?.trim()) return res.status(400).json({ error: 'Empty message' });
+
+    const chatMemoryPref = chatMemory !== false;
 
     let convId = conversationId;
     if (!convId) {
       convId = crypto.randomUUID();
-      q.insertConvo.run(convId, message.slice(0, 60), uid ?? null);
+      q.insertConvo.run(convId, message.slice(0, 60), uid ?? null, chatMemoryPref ? 1 : 0);
     } else {
       const convo = q.getConvo.get(convId);
       if (convo && FIREBASE_CONFIGURED && uid && convo.user_id && convo.user_id !== uid)
         return res.status(403).json({ error: 'Forbidden' });
     }
 
-    q.insertMsg.run(crypto.randomUUID(), convId, 'user', message, 0, 0, 0);
+    q.insertMsg.run(crypto.randomUUID(), convId, 'user', message, 0, 0, 0, null);
 
     if (q.msgCount.get(convId).n === 1) {
       q.updateTitle.run(message.slice(0, 60), convId);
@@ -593,22 +675,43 @@ app.post('/api/chat', async (req, res) => {
     if (external && assistantReply?.trim()) {
       const extIn = Math.max(0, Number(inputTokens) || 0);
       const extOut = Math.max(0, Number(outputTokens) || 0);
-      q.insertMsg.run(crypto.randomUUID(), convId, 'assistant', assistantReply, 0, extIn, extOut);
+      const extThinking = typeof assistantThinking === 'string' && assistantThinking.trim()
+        ? assistantThinking.trim()
+        : null;
+      q.insertMsg.run(crypto.randomUUID(), convId, 'assistant', assistantReply, 0, extIn, extOut, extThinking);
       q.touchConvo.run(convId);
-      return res.json({ conversationId: convId, response: assistantReply, inputTokens: extIn, outputTokens: extOut });
+      return res.json({
+        conversationId: convId,
+        response: assistantReply,
+        thinking: extThinking || undefined,
+        inputTokens: extIn,
+        outputTokens: extOut,
+      });
     }
 
-    const history = convoHistoryRows(convId);
-    const { reply, proto, inputTokens: modIn, outputTokens: modOut } = await askModulon(message, history, language || 'en');
+    const convo = q.getConvo.get(convId);
+    const useChatMemory = convo?.memory_enabled !== 0;
+    const history = useChatMemory ? convoHistoryRows(convId) : [];
+    const modPersonalization = sanitizePersonalization(personalization);
+
+    const useThinkMode = !!thinkMode;
+    const { reply, thinking, proto, inputTokens: modIn, outputTokens: modOut } = await askModulon(
+      message,
+      history,
+      language || 'en',
+      modPersonalization,
+      useThinkMode,
+    );
     const inTok = modIn || Math.ceil(message.length / 4);
     const outTok = modOut || Math.ceil(String(reply).length / 4);
 
-    q.insertMsg.run(crypto.randomUUID(), convId, 'assistant', reply, proto ? 1 : 0, inTok, outTok);
+    insertAssistantMsg(convId, reply, proto, inTok, outTok, thinking);
     q.touchConvo.run(convId);
 
     res.json({
       conversationId: convId,
       response: reply,
+      thinking: thinking || undefined,
       inputTokens: inTok,
       outputTokens: outTok,
     });

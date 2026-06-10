@@ -133,19 +133,9 @@
     will-change: transform, opacity, filter;
   }
 
-  .model-picker-menu--in {
-    animation: model-picker-genie-in 0.44s cubic-bezier(0.22, 1.28, 0.36, 1) forwards;
-  }
-
-  .model-picker-menu--out {
-    animation: model-picker-genie-out 0.3s cubic-bezier(0.55, 0, 0.85, 0.15) forwards;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .model-picker-menu--in,
-    .model-picker-menu--out {
-      animation: none;
-    }
+  /* Model picker genie motion — Web Animations API (useGenieMenu.js). */
+  .model-picker-menu--exiting {
+    pointer-events: none;
   }
 
   .model-picker-menu__list {
@@ -192,6 +182,48 @@
   .dark .model-picker-item--idle:hover {
     background-color: rgb(255 255 255 / 0.05);
   }
+}
+
+/* Chat density — comfortable (default) vs compact. */
+html[data-chat-density='comfortable'] {
+  --chat-msg-gap: 1rem;
+  --chat-bubble-px: 1rem;
+  --chat-bubble-py: 0.75rem;
+}
+
+html[data-chat-density='compact'] {
+  --chat-msg-gap: 0.5rem;
+  --chat-bubble-px: 0.75rem;
+  --chat-bubble-py: 0.5rem;
+}
+
+@layer components {
+  .chat-messages {
+    display: flex;
+    flex-direction: column;
+    gap: var(--chat-msg-gap, 1rem);
+  }
+
+  .chat-bubble {
+    padding: var(--chat-bubble-py, 0.75rem) var(--chat-bubble-px, 1rem);
+  }
+}
+
+/* Reduced motion — user setting or system preference via data attribute. */
+html[data-reduced-motion='true'] .animate-bounce {
+  animation: none !important;
+}
+
+html[data-reduced-motion='true'] .settings-tab-btn,
+html[data-reduced-motion='true'] .settings-tab-btn .settings-tab-label,
+html[data-reduced-motion='true'] .sidebar-settings-btn,
+html[data-reduced-motion='true'] .sidebar-settings-btn .sidebar-settings-label {
+  transition-duration: 0.01ms !important;
+}
+
+html[data-reduced-motion='true'] .settings-tab-icon-spin,
+html[data-reduced-motion='true'] .sidebar-settings-btn:hover .sidebar-settings-icon {
+  animation: none !important;
 }
 
 @layer utilities {

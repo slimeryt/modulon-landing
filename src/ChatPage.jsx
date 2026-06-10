@@ -15,15 +15,12 @@ import {
   Key,
   LogOut,
   MessageCircle,
-  Monitor,
-  Moon,
   PanelLeft,
   Palette,
   Plus,
   Send,
   Settings,
   Shield,
-  Sun,
   Trash2,
   User,
   X,
@@ -35,8 +32,15 @@ import ChatMessageContent from './ChatMessageContent';
 import { MessageTokenCounter } from './MessageTokenCounter';
 import { formatSidebarChatTitle, isSidebarTitleTruncated } from './chatTitle';
 import { useGenieMenu } from './useGenieMenu';
+import PersonalizationSettings from './PersonalizationSettings';
+import ChatMemoryToggle from './ChatMemoryToggle';
+import ThinkModeToggle from './ThinkModeToggle';
+import AssistantThinking from './AssistantThinking';
+import { readThinkMode, writeThinkMode } from './modulonThinkMode';
+import { parseThinkResponse, THINK_MODE_SYSTEM_HINT } from './parseThinkResponse';
+import { readPersonalization, readPersonalizationStored } from './modulonPersonalization';
 import { modelPickerItemClass } from './modelPickerMenu';
-import { useTheme } from './ThemeContext';
+import AppearanceSettings from './AppearanceSettings';
 import { translatedHomeGreeting } from './i18n/homeGreeting';
 import modulonIcon from './assets/icons/Modulon_Icon.png';
 
@@ -409,6 +413,7 @@ function mapRowsToMessages(rows) {
     id: m.id,
     role: m.role,
     text: m.body,
+    thinking: m.thinking || '',
     prototype: !!m.prototype,
     createdAt: m.created_at,
     inputTokens: m.input_tokens ?? 0,
@@ -416,8 +421,17 @@ function mapRowsToMessages(rows) {
   }));
 }
 
-async function callProviderApi(provider, modelId, apiKey, priorMessages, newText, replyLanguage = 'en') {
-  const systemPrompt = providerReplyPrompt(replyLanguage);
+function providerResult(rawText, thinkMode, usage = {}) {
+  if (thinkMode) {
+    const { thinking, reply } = parseThinkResponse(rawText);
+    return { text: reply, thinking, ...usage };
+  }
+  return { text: rawText, thinking: '', ...usage };
+}
+
+async function callProviderApi(provider, modelId, apiKey, priorMessages, newText, replyLanguage = 'en', thinkMode = false) {
+  let systemPrompt = providerReplyPrompt(replyLanguage);
+  if (thinkMode) systemPrompt += `\n\n${THINK_MODE_SYSTEM_HINT}`;
   const history = priorMessages
     .filter(m => !m.error && (m.role === 'user' || m.role === 'assistant'))
     .map(m => ({ role: m.role, content: m.text }));
@@ -439,11 +453,10 @@ async function callProviderApi(provider, modelId, apiKey, priorMessages, newText
     });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e?.error?.message || `${provider} error ${res.status}`); }
     const d = await res.json();
-    return {
-      text: d.choices?.[0]?.message?.content ?? '',
+    return providerResult(d.choices?.[0]?.message?.content ?? '', thinkMode, {
       inputTokens: d.usage?.prompt_tokens ?? 0,
       outputTokens: d.usage?.completion_tokens ?? 0,
-    };
+    });
   }
 
   if (provider === 'anthropic') {
@@ -464,11 +477,10 @@ async function callProviderApi(provider, modelId, apiKey, priorMessages, newText
     });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e?.error?.message || `Anthropic error ${res.status}`); }
     const d = await res.json();
-    return {
-      text: d.content?.[0]?.text ?? '',
+    return providerResult(d.content?.[0]?.text ?? '', thinkMode, {
       inputTokens: d.usage?.input_tokens ?? 0,
       outputTokens: d.usage?.output_tokens ?? 0,
-    };
+    });
   }
 
   if (provider === 'google') {
@@ -487,11 +499,10 @@ async function callProviderApi(provider, modelId, apiKey, priorMessages, newText
     });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e?.error?.message || `Google error ${res.status}`); }
     const d = await res.json();
-    return {
-      text: d.candidates?.[0]?.content?.parts?.[0]?.text ?? '',
+    return providerResult(d.candidates?.[0]?.content?.parts?.[0]?.text ?? '', thinkMode, {
       inputTokens: d.usageMetadata?.promptTokenCount ?? 0,
       outputTokens: d.usageMetadata?.candidatesTokenCount ?? 0,
-    };
+    });
   }
 
   throw new Error(`Unknown provider: ${provider}`);
@@ -500,7 +511,6 @@ async function callProviderApi(provider, modelId, apiKey, priorMessages, newText
 export default function ChatPage() {
   const navigate = useNavigate();
   const { firebaseConfigured, user, signOutUser, sendPasswordReset } = useAuth();
-  const { theme, setTheme } = useTheme();
   const { t, language } = useLanguage();
   const [conversations, setConversations] = useState([]);
   const [conversationId, setConversationId] = useState(null);
@@ -537,7 +547,19 @@ export default function ChatPage() {
   const [attachMenuPos, setAttachMenuPos] = useState(null);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [modelMenuPos, setModelMenuPos] = useState(null);
-  const { menuMounted: modelMenuMounted, menuClass: modelMenuAnimClass, onMenuAnimationEnd: onModelMenuAnimationEnd } = useGenieMenu(modelMenuOpen);
+  const {
+    menuMounted: modelMenuMounted,
+    menuClass: modelMenuAnimClass,
+    panelRef: modelMenuPanelRef,
+  } = useGenieMenu(modelMenuOpen);
+
+  const onModelMenuRef = useCallback(
+    (node) => {
+      modelSelectMenuRef.current = node;
+      modelMenuPanelRef(node);
+    },
+    [modelMenuPanelRef],
+  );
   const [contextMenu, setContextMenu] = useState(null);
   const [dailyUsage, setDailyUsage] = useState(() => readDailyUsage());
   const [weeklyUsage, setWeeklyUsage] = useState(() => readWeeklyUsage());
@@ -545,6 +567,7 @@ export default function ChatPage() {
   const [extraUsageCredits, setExtraUsageCredits] = useState(() => readExtraUsageCredits());
   const [apiKeys, setApiKeys] = useState(() => readApiKeys());
   const [apiKeyDrafts, setApiKeyDrafts] = useState(() => readApiKeys());
+  const [personalization, setPersonalization] = useState(() => readPersonalizationStored());
   const [apiKeysVisible, setApiKeysVisible] = useState({ anthropic: false, openai: false, google: false, xai: false, deepseek: false });
   const [selectedModel, setSelectedModel] = useState({ id: 'modulon', label: MODULON_CHAT_MODEL_LABEL, provider: 'modulon' });
 
@@ -553,6 +576,9 @@ export default function ChatPage() {
     const token = user ? await user.getIdToken() : null;
     return apiJson(path, opts, token);
   }, [user]);
+
+  const [chatMemoryEnabled, setChatMemoryEnabled] = useState(true);
+  const [thinkMode, setThinkMode] = useState(() => readThinkMode());
 
   const refreshConversations = useCallback(async () => {
     setLoadingList(true);
@@ -634,6 +660,34 @@ export default function ChatPage() {
   }, [conversationId, loadMessages]);
 
   useEffect(() => {
+    if (!conversationId) {
+      setChatMemoryEnabled(true);
+      return;
+    }
+    const convo = conversations.find((c) => c.id === conversationId);
+    if (convo) setChatMemoryEnabled(convo.memory_enabled !== 0);
+  }, [conversationId, conversations]);
+
+  const onChatMemoryChange = useCallback(
+    async (next) => {
+      setChatMemoryEnabled(next);
+      if (!conversationId) return;
+      try {
+        await callApi(`/chat/conversations/${conversationId}`, {
+          method: 'PATCH',
+          body: { memoryEnabled: next },
+        });
+        setConversations((prev) =>
+          prev.map((c) => (c.id === conversationId ? { ...c, memory_enabled: next ? 1 : 0 } : c)),
+        );
+      } catch {
+        /* local toggle still applies to the next send */
+      }
+    },
+    [conversationId, callApi],
+  );
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, sending]);
 
@@ -658,6 +712,23 @@ export default function ChatPage() {
   }, [settingsOpen]);
 
   useEffect(() => {
+    if (settingsOpen) {
+      setSettingsMounted(true);
+      let raf2;
+      const raf = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => setSettingsVisible(true));
+      });
+      return () => {
+        cancelAnimationFrame(raf);
+        cancelAnimationFrame(raf2);
+      };
+    }
+    setSettingsVisible(false);
+    const t = setTimeout(() => setSettingsMounted(false), 220);
+    return () => clearTimeout(t);
+  }, [settingsOpen]);
+
+  useEffect(() => {
     if (!settingsOpen && !signOutConfirmOpen) return undefined;
     const onKey = (e) => {
       if (e.key !== 'Escape') return;
@@ -667,21 +738,6 @@ export default function ChatPage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [settingsOpen, signOutConfirmOpen]);
-
-  useEffect(() => {
-    if (settingsOpen) {
-      setSettingsMounted(true);
-      let raf2;
-      const raf = requestAnimationFrame(() => {
-        raf2 = requestAnimationFrame(() => setSettingsVisible(true));
-      });
-      return () => { cancelAnimationFrame(raf); cancelAnimationFrame(raf2); };
-    } else {
-      setSettingsVisible(false);
-      const t = setTimeout(() => setSettingsMounted(false), 220);
-      return () => clearTimeout(t);
-    }
-  }, [settingsOpen]);
 
   useEffect(() => {
     if (!sidebarOpen) setSettingsOpen(false);
@@ -1021,7 +1077,16 @@ export default function ChatPage() {
         const apiKey = apiKeys[selectedModel.provider];
         if (!apiKey) throw new Error(`No API key saved for ${selectedModel.label}. Add one in Settings → API Keys.`);
 
-        const result = await callProviderApi(selectedModel.provider, selectedModel.id, apiKey, messages, text, language);
+        const prior = chatMemoryEnabled ? messages : [];
+        const result = await callProviderApi(
+          selectedModel.provider,
+          selectedModel.id,
+          apiKey,
+          prior,
+          text,
+          language,
+          thinkMode,
+        );
         const inTok = result.inputTokens || Math.ceil(text.length / 4);
         const outTok = result.outputTokens || Math.ceil(result.text.length / 4);
         const data = await callApi('/chat', {
@@ -1029,8 +1094,11 @@ export default function ChatPage() {
           body: {
             message: text,
             conversationId,
+            chatMemory: chatMemoryEnabled,
+            thinkMode,
             external: true,
             assistantReply: result.text,
+            assistantThinking: result.thinking || undefined,
             inputTokens: inTok,
             outputTokens: outTok,
           },
@@ -1044,9 +1112,17 @@ export default function ChatPage() {
         bumpDailyCost(cost);
         bumpWeeklyCost(cost);
       } else {
+        const pers = readPersonalization();
         const data = await callApi('/chat', {
           method: 'POST',
-          body: { message: text, conversationId, language },
+          body: {
+            message: text,
+            conversationId,
+            language,
+            chatMemory: chatMemoryEnabled,
+            thinkMode,
+            ...(pers ? { personalization: pers } : {}),
+          },
         });
         const convId = data.conversationId;
         if (convId) setConversationId(convId);
@@ -1404,13 +1480,13 @@ export default function ChatPage() {
               </div>
               {sending ? (
                 <div className="flex w-full max-w-md justify-start">
-                  <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-zinc-200/90 bg-white px-4 py-3 text-sm text-zinc-500 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/40">
+                  <div className="chat-bubble flex items-center gap-2 rounded-2xl rounded-bl-md border border-zinc-200/90 bg-white text-sm text-zinc-500 shadow-sm dark:border-white/[0.08] dark:bg-white/[0.06] dark:text-white/40">
                     <span className="inline-flex gap-1">
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 dark:bg-white/40" style={{ animationDelay: '0ms' }} />
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 dark:bg-white/40" style={{ animationDelay: '150ms' }} />
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 dark:bg-white/40" style={{ animationDelay: '300ms' }} />
                     </span>
-                    {t('chat.thinking')}
+                    {thinkMode ? t('chat.thinkingDeep') : t('chat.thinking')}
                   </div>
                 </div>
               ) : null}
@@ -1421,15 +1497,18 @@ export default function ChatPage() {
             {loadingMessages && conversationId ? (
               <p className="mb-2 text-xs text-zinc-500 dark:text-white/35">{t('chat.loadingMessages')}</p>
             ) : null}
-            <div className="no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto pb-4">
+            <div className="chat-messages no-scrollbar min-h-0 flex-1 overflow-y-auto pb-4">
           {messages.map((msg) => (
             <div
               key={msg.id}
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div className={`max-w-[85%] ${msg.role === 'assistant' ? 'flex flex-col' : ''}`}>
+                {msg.role === 'assistant' && msg.thinking ? (
+                  <AssistantThinking thinking={msg.thinking} />
+                ) : null}
                 <div
-                  className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                  className={`chat-bubble rounded-2xl text-sm leading-relaxed ${
                     msg.role === 'user'
                       ? 'bg-zinc-900 text-white dark:bg-white dark:text-black rounded-br-md'
                       : msg.error
@@ -1452,13 +1531,13 @@ export default function ChatPage() {
           ))}
           {sending ? (
             <div className="flex justify-start">
-              <div className="rounded-2xl rounded-bl-md px-4 py-3 bg-zinc-100 border border-zinc-200/90 text-sm text-zinc-500 flex items-center gap-2 dark:bg-white/[0.04] dark:border-white/[0.06] dark:text-white/40">
+              <div className="chat-bubble rounded-2xl rounded-bl-md bg-zinc-100 border border-zinc-200/90 text-sm text-zinc-500 flex items-center gap-2 dark:bg-white/[0.04] dark:border-white/[0.06] dark:text-white/40">
                 <span className="inline-flex gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-white/40 animate-bounce" style={{ animationDelay: '0ms' }} />
                   <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-white/40 animate-bounce" style={{ animationDelay: '150ms' }} />
                   <span className="w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-white/40 animate-bounce" style={{ animationDelay: '300ms' }} />
                 </span>
-                {t('chat.thinking')}
+                {thinkMode ? t('chat.thinkingDeep') : t('chat.thinking')}
               </div>
             </div>
           ) : null}
@@ -1480,6 +1559,21 @@ export default function ChatPage() {
             send();
           }}
         >
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <ChatMemoryToggle
+              enabled={chatMemoryEnabled}
+              onChange={onChatMemoryChange}
+              disabled={sending || apiOk === false}
+            />
+            <ThinkModeToggle
+              enabled={thinkMode}
+              onChange={(next) => {
+                setThinkMode(next);
+                writeThinkMode(next);
+              }}
+              disabled={sending || apiOk === false}
+            />
+          </div>
           <div
             className={`flex w-full items-end gap-0.5 border bg-white transition-shadow focus-within:ring-2 dark:bg-black/35 dark:shadow-none ${
               isHome
@@ -1593,12 +1687,11 @@ export default function ChatPage() {
             </button>
             {modelMenuMounted && modelMenuPos ? (
               <div
-                ref={modelSelectMenuRef}
+                ref={onModelMenuRef}
                 role="menu"
                 aria-label="Models"
                 className={`fixed z-[80] w-56 overflow-hidden rounded-3xl border border-zinc-200/90 bg-white py-1.5 text-sm shadow-xl dark:border-white/[0.12] dark:bg-[#121214] ${modelMenuAnimClass}`}
                 style={{ left: modelMenuPos.left, bottom: modelMenuPos.bottom }}
-                onAnimationEnd={onModelMenuAnimationEnd}
               >
                 <div className="model-picker-menu__list max-h-72 overflow-y-auto no-scrollbar">
                   <button
@@ -1664,7 +1757,9 @@ export default function ChatPage() {
             aria-label="Close settings"
             onClick={() => setSettingsOpen(false)}
           />
-          <div className={`relative z-10 flex h-[100dvh] w-full max-w-none flex-col overflow-hidden border-0 bg-white/85 shadow-none backdrop-blur-2xl transition-[opacity,transform] duration-200 dark:bg-white/[0.07] dark:backdrop-blur-2xl sm:h-[min(84vh,640px)] sm:min-h-[min(380px,68vh)] sm:max-w-[min(92vw,56rem)] sm:rounded-[2rem] sm:border sm:border-zinc-200/60 sm:bg-white/90 sm:shadow-[0_24px_80px_rgba(0,0,0,0.12)] dark:sm:border-white/[0.1] dark:sm:bg-white/[0.08] dark:sm:shadow-[0_24px_80px_rgba(0,0,0,0.45)] ${settingsVisible ? 'opacity-100 scale-100' : 'opacity-0 sm:scale-[0.97]'}`}>
+          <div
+            className={`relative z-10 flex h-[100dvh] w-full max-w-none flex-col overflow-hidden border-0 bg-white/85 shadow-none backdrop-blur-2xl transition-[opacity,transform] duration-200 dark:bg-white/[0.07] dark:backdrop-blur-2xl sm:h-[min(84vh,640px)] sm:min-h-[min(380px,68vh)] sm:max-w-[min(92vw,56rem)] sm:rounded-[2rem] sm:border sm:border-zinc-200/60 sm:bg-white/90 sm:shadow-[0_24px_80px_rgba(0,0,0,0.12)] dark:sm:border-white/[0.1] dark:sm:bg-white/[0.08] dark:sm:shadow-[0_24px_80px_rgba(0,0,0,0.45)] ${settingsVisible ? 'opacity-100 scale-100' : 'opacity-0 sm:scale-[0.97]'}`}
+          >
             <div className="flex shrink-0 items-center gap-2 border-b border-zinc-200/40 bg-transparent px-4 py-2.5 dark:border-white/[0.06] max-sm:pt-[max(0.625rem,env(safe-area-inset-top,0px))] sm:px-5">
               <h2 id="chat-settings-title" className="shrink-0 text-base font-semibold tracking-tight text-zinc-900 dark:text-white sm:text-lg">
                 Settings
@@ -1674,13 +1769,13 @@ export default function ChatPage() {
                 aria-label="Settings sections"
               >
               <div ref={tabNavRef} className="relative mx-auto flex gap-1 rounded-full border border-zinc-200/80 bg-zinc-100/80 p-1 dark:border-white/[0.08] dark:bg-white/[0.05]">
-                {tabIndicator && (
+                {tabIndicator ? (
                   <span
                     aria-hidden
                     className="pointer-events-none absolute top-1 bottom-1 rounded-full bg-white shadow-sm ring-1 ring-zinc-200/80 transition-[left,width] duration-200 ease-out dark:bg-white/[0.14] dark:ring-white/10"
                     style={{ left: tabIndicator.left, width: tabIndicator.width }}
                   />
-                )}
+                ) : null}
                 {[
                   ...(user
                     ? [
@@ -1771,55 +1866,22 @@ export default function ChatPage() {
                           </p>
                           <p className="mt-0.5 truncate font-mono text-xs text-zinc-500 dark:text-white/40 sm:text-sm">{user.email}</p>
                         </div>
+                        <button
+                          type="button"
+                          onClick={() => setSignOutConfirmOpen(true)}
+                          aria-label="Sign out"
+                          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-800 hover:bg-red-500/15 dark:text-red-200/90 sm:px-4 sm:py-2.5"
+                        >
+                          <LogOut className="h-4 w-4" aria-hidden />
+                          <span className="hidden sm:inline">Sign out</span>
+                        </button>
                       </div>
                     </div>
-                    <div className="flex justify-center">
-                      <button
-                        type="button"
-                        onClick={() => setSignOutConfirmOpen(true)}
-                        className="inline-flex items-center justify-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-medium text-red-800 hover:bg-red-500/15 dark:text-red-200/90"
-                      >
-                        <LogOut className="h-4 w-4" aria-hidden />
-                        Sign out
-                      </button>
-                    </div>
+                    <PersonalizationSettings value={personalization} onChange={setPersonalization} />
                   </div>
                 ) : null}
 
-                {settingsSection === 'appearance' ? (
-                  <div className="max-w-lg space-y-4">
-                    <p className="text-[10px] font-medium uppercase tracking-widest text-zinc-500 dark:text-white/35">
-                      Color theme
-                    </p>
-                    <p className="text-sm leading-relaxed text-zinc-600 dark:text-white/45">
-                      Choose how Modulon looks across the site. &ldquo;System&rdquo; follows your device light or dark
-                      mode.
-                    </p>
-                    <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Color theme">
-                      {[
-                        { id: 'dark', label: 'Dark', Icon: Moon },
-                        { id: 'light', label: 'Light', Icon: Sun },
-                        { id: 'system', label: 'System', Icon: Monitor },
-                      ].map(({ id, label, Icon }) => (
-                        <button
-                          key={id}
-                          type="button"
-                          role="radio"
-                          aria-checked={theme === id}
-                          onClick={() => setTheme(id)}
-                          className={`inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-medium transition-colors ${
-                            theme === id
-                              ? 'border-zinc-900 bg-zinc-900 text-white dark:border-white/25 dark:bg-white/[0.14] dark:text-white'
-                              : 'border-zinc-300/90 text-zinc-700 hover:bg-zinc-100 dark:border-white/15 dark:text-white/75 dark:hover:bg-white/[0.06]'
-                          }`}
-                        >
-                          <Icon className="h-4 w-4 shrink-0 opacity-90" aria-hidden />
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
+                {settingsSection === 'appearance' ? <AppearanceSettings /> : null}
 
                 {settingsSection === 'security' && user ? (
                   <div className="max-w-lg space-y-4">
