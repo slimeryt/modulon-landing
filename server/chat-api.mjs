@@ -496,6 +496,46 @@ function parseThinkResponse(text) {
   return { thinking, reply: reply || thinking };
 }
 
+/** Phi-3 and small models sometimes echo the user, leak tokens, or run on with junk. */
+const MODULON_REPLY_STOP_MARKERS = [
+  /\n---+\s*\n/i,
+  /\nGiven document:/i,
+  /\nDocument Content Summary/i,
+  /\nAnalyze the given document/i,
+  /\n\| Misconception\s*\|/i,
+  /\nProvide a detailed, master-level solution/i,
+];
+
+const OLLAMA_STOP_SEQUENCES = [
+  '<|end|>',
+  '<|endoftext|>',
+  '<|end of response|>',
+  '<|assistant|>',
+  '<|user|>',
+  '<|system|>',
+  '\n---\n',
+  'Given document:',
+  'Document Content Summary',
+];
+
+function sanitizeModulonReply(raw, userMessage = '') {
+  let text = String(raw || '').replace(/<\|[^|>]*\|>/gi, '').trim();
+  if (!text) return '';
+
+  for (const re of MODULON_REPLY_STOP_MARKERS) {
+    const idx = text.search(re);
+    if (idx > 0) text = text.slice(0, idx).trim();
+  }
+
+  const user = String(userMessage || '').trim();
+  if (user) {
+    const escaped = user.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    text = text.replace(new RegExp(`^${escaped}\\s*`, 'i'), '').trim();
+  }
+
+  return text.replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function modulonSystemPrompt(langCode = 'en', personalization = '', thinkMode = false) {
   if (process.env.MODULON_SYSTEM_PROMPT) return process.env.MODULON_SYSTEM_PROMPT;
   const label = modulonLangLabel(langCode);
@@ -504,7 +544,10 @@ function modulonSystemPrompt(langCode = 'en', personalization = '', thinkMode = 
     `CRITICAL: The user's app language is ${label}. Every reply MUST be written entirely in ${label}.\n` +
     `Do NOT reply in Chinese, Russian, Japanese, or any other language unless the user's latest message is clearly written in that language.\n` +
     `Never say you are an AI, artificial intelligence, language model, or bot. Speak naturally as Modulon.\n` +
-    `Do not mention OpenAI, Anthropic, Ollama, Phi, or other AI brands.`;
+    `Do not mention OpenAI, Anthropic, Ollama, Phi, or other AI brands.\n` +
+    `Reply only to the user's latest message. Never repeat their message back.\n` +
+    `For greetings and small talk, answer in one or two short, friendly sentences.\n` +
+    `Never invent assignments, essays, tables, document analyses, or follow-up tasks. Stop when your answer is complete.`;
   if (thinkMode) {
     base += `\n\n${THINK_MODE_SYSTEM_HINT}`;
   }
@@ -560,7 +603,7 @@ async function chatOllama({ message, model, history = [], systemPrompt, baseUrl,
     ...history,
     { role: 'user', content: message },
   ];
-  const defaultPredict = Number(process.env.OLLAMA_NUM_PREDICT || 512);
+  const defaultPredict = Number(process.env.OLLAMA_NUM_PREDICT || 256);
   const thinkPredict = Number(process.env.OLLAMA_THINK_NUM_PREDICT || 896);
   const r = await fetch(`${ollamaBase}/api/chat`, {
     method: 'POST',
@@ -572,6 +615,8 @@ async function chatOllama({ message, model, history = [], systemPrompt, baseUrl,
       options: {
         num_ctx: Number(process.env.OLLAMA_NUM_CTX || 2048),
         num_predict: thinkMode ? thinkPredict : defaultPredict,
+        stop: OLLAMA_STOP_SEQUENCES,
+        temperature: Number(process.env.OLLAMA_TEMPERATURE || 0.7),
       },
     }),
     signal: AbortSignal.timeout(Number(process.env.OLLAMA_CHAT_TIMEOUT_MS || 180_000)),
@@ -605,9 +650,11 @@ async function askModulon(message, history = [], langCode = 'en', personalizatio
         thinkMode,
       });
       const parsed = thinkMode ? parseThinkResponse(text) : { thinking: '', reply: text || '…' };
+      const reply = sanitizeModulonReply(parsed.reply, message) || '…';
+      const thinking = sanitizeModulonReply(parsed.thinking, message);
       return {
-        reply: parsed.reply || '…',
-        thinking: parsed.thinking,
+        reply,
+        thinking,
         proto: false,
         inputTokens,
         outputTokens,
