@@ -219,14 +219,16 @@ db.exec(`
 // Migration: add user_id to existing databases
 try { db.exec(`ALTER TABLE conversations ADD COLUMN user_id TEXT`); } catch {}
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_convos_user ON conversations(user_id)`); } catch {}
+try { db.exec(`ALTER TABLE messages ADD COLUMN input_tokens INTEGER DEFAULT 0`); } catch {}
+try { db.exec(`ALTER TABLE messages ADD COLUMN output_tokens INTEGER DEFAULT 0`); } catch {}
 
 const q = {
   listConvos:   db.prepare(`SELECT id,title,created_at,updated_at FROM conversations WHERE user_id IS ? ORDER BY updated_at DESC LIMIT 100`),
   getConvo:     db.prepare(`SELECT id,user_id FROM conversations WHERE id=?`),
   insertConvo:  db.prepare(`INSERT INTO conversations (id,title,user_id) VALUES (?,?,?)`),
   deleteConvo:  db.prepare(`DELETE FROM conversations WHERE id=?`),
-  listMessages: db.prepare(`SELECT id,role,body,prototype,created_at FROM messages WHERE conversation_id=? ORDER BY created_at ASC`),
-  insertMsg:    db.prepare(`INSERT INTO messages (id,conversation_id,role,body,prototype) VALUES (?,?,?,?,?)`),
+  listMessages: db.prepare(`SELECT id,role,body,prototype,created_at,input_tokens,output_tokens FROM messages WHERE conversation_id=? ORDER BY created_at ASC`),
+  insertMsg:    db.prepare(`INSERT INTO messages (id,conversation_id,role,body,prototype,input_tokens,output_tokens) VALUES (?,?,?,?,?,?,?)`),
   msgCount:     db.prepare(`SELECT COUNT(*) as n FROM messages WHERE conversation_id=?`),
   updateTitle:  db.prepare(`UPDATE conversations SET title=? WHERE id=?`),
   touchConvo:   db.prepare(`UPDATE conversations SET updated_at=CURRENT_TIMESTAMP WHERE id=?`),
@@ -408,7 +410,9 @@ app.post('/api/chat/conversations/:id/messages', async (req, res) => {
     return res.status(400).json({ error: 'Invalid role' });
 
   const countBefore = q.msgCount.get(req.params.id).n;
-  q.insertMsg.run(crypto.randomUUID(), req.params.id, role, body, prototype ? 1 : 0);
+  const inTok = Math.max(0, Number(req.body?.inputTokens) || 0);
+  const outTok = Math.max(0, Number(req.body?.outputTokens) || 0);
+  q.insertMsg.run(crypto.randomUUID(), req.params.id, role, body, prototype ? 1 : 0, inTok, outTok);
   q.touchConvo.run(req.params.id);
 
   if (countBefore === 0 && role === 'user') {
@@ -532,31 +536,33 @@ async function chatOllama({ message, model, history = [], systemPrompt, baseUrl 
 /** Modulon M0.1 — uses local Ollama by default; falls back to the GPT-2 bridge. */
 async function askModulon(message, history = [], langCode = 'en') {
   if (MODULON_BACKEND === 'python') {
-    return { reply: await askPython(message), proto: false };
+    const reply = await askPython(message);
+    return { reply, proto: false, inputTokens: 0, outputTokens: 0 };
   }
 
   if (MODULON_BACKEND === 'ollama' || MODULON_BACKEND === 'ollama-first') {
     try {
-      const { text } = await chatOllama({
+      const { text, inputTokens, outputTokens } = await chatOllama({
         message: modulonOllamaUserTurn(message, langCode),
         model: MODULON_OLLAMA_MODEL,
         history,
         systemPrompt: modulonSystemPrompt(langCode),
       });
-      return { reply: text || '…', proto: false };
+      return { reply: text || '…', proto: false, inputTokens, outputTokens };
     } catch (err) {
       console.error('[modulon] Ollama error:', err.message);
       if (MODULON_BACKEND === 'ollama') {
-        return { reply: `⚠ Modulon is temporarily unavailable. (${err.message})`, proto: true };
+        return { reply: `⚠ Modulon is temporarily unavailable. (${err.message})`, proto: true, inputTokens: 0, outputTokens: 0 };
       }
       console.warn('[modulon] Ollama unavailable, falling back to GPT-2:', err.message);
     }
   }
 
   try {
-    return { reply: await askPython(message), proto: false };
+    const reply = await askPython(message);
+    return { reply, proto: false, inputTokens: 0, outputTokens: 0 };
   } catch (err) {
-    return { reply: `⚠ ${err.message}`, proto: true };
+    return { reply: `⚠ ${err.message}`, proto: true, inputTokens: 0, outputTokens: 0 };
   }
 }
 
@@ -565,7 +571,7 @@ app.post('/api/chat', async (req, res) => {
     const uid = await extractUserId(req);
     if (FIREBASE_CONFIGURED && !uid) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { message, conversationId, assistantReply, external, language } = req.body ?? {};
+    const { message, conversationId, assistantReply, external, language, inputTokens, outputTokens } = req.body ?? {};
     if (!message?.trim()) return res.status(400).json({ error: 'Empty message' });
 
     let convId = conversationId;
@@ -578,25 +584,34 @@ app.post('/api/chat', async (req, res) => {
         return res.status(403).json({ error: 'Forbidden' });
     }
 
-    q.insertMsg.run(crypto.randomUUID(), convId, 'user', message, 0);
+    q.insertMsg.run(crypto.randomUUID(), convId, 'user', message, 0, 0, 0);
 
     if (q.msgCount.get(convId).n === 1) {
       q.updateTitle.run(message.slice(0, 60), convId);
     }
 
     if (external && assistantReply?.trim()) {
-      q.insertMsg.run(crypto.randomUUID(), convId, 'assistant', assistantReply, 0);
+      const extIn = Math.max(0, Number(inputTokens) || 0);
+      const extOut = Math.max(0, Number(outputTokens) || 0);
+      q.insertMsg.run(crypto.randomUUID(), convId, 'assistant', assistantReply, 0, extIn, extOut);
       q.touchConvo.run(convId);
-      return res.json({ conversationId: convId, response: assistantReply });
+      return res.json({ conversationId: convId, response: assistantReply, inputTokens: extIn, outputTokens: extOut });
     }
 
     const history = convoHistoryRows(convId);
-    const { reply, proto } = await askModulon(message, history, language || 'en');
+    const { reply, proto, inputTokens: modIn, outputTokens: modOut } = await askModulon(message, history, language || 'en');
+    const inTok = modIn || Math.ceil(message.length / 4);
+    const outTok = modOut || Math.ceil(String(reply).length / 4);
 
-    q.insertMsg.run(crypto.randomUUID(), convId, 'assistant', reply, proto ? 1 : 0);
+    q.insertMsg.run(crypto.randomUUID(), convId, 'assistant', reply, proto ? 1 : 0, inTok, outTok);
     q.touchConvo.run(convId);
 
-    res.json({ conversationId: convId, response: reply });
+    res.json({
+      conversationId: convId,
+      response: reply,
+      inputTokens: inTok,
+      outputTokens: outTok,
+    });
   } catch (err) {
     console.error('[chat]', err);
     res.status(500).json({ error: err.message || 'Chat failed' });

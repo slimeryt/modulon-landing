@@ -31,7 +31,10 @@ import { useAuth, mapAuthError } from './AuthContext';
 import { useLanguage } from './LanguageContext';
 import { providerReplyPrompt } from './languages';
 import ChatMessageContent from './ChatMessageContent';
+import { MessageTokenCounter } from './MessageTokenCounter';
 import { formatSidebarChatTitle, isSidebarTitleTruncated } from './chatTitle';
+import { useGenieMenu } from './useGenieMenu';
+import { modelPickerItemClass } from './modelPickerMenu';
 import { useTheme } from './ThemeContext';
 import { translatedHomeGreeting } from './i18n/homeGreeting';
 import modulonIcon from './assets/icons/Modulon_Icon.png';
@@ -81,6 +84,7 @@ const WEEKLY_COST_CAP       = DAILY_COST_CAP * 7;
 const WEEKLY_COST_CAP_EXTRA = DAILY_COST_CAP_EXTRA * 7;
 
 const MODEL_PRICING={
+  modulon:             {input: 0.10,output: 0.20},
   'claude-opus-4-5':   {input:15.00,output:75.00},
   'claude-sonnet-4-5': {input: 3.00,output:15.00},
   'claude-haiku-4-5':  {input: 0.80,output: 4.00},
@@ -202,7 +206,15 @@ async function apiJson(path, opts = {}, token = null) {
 }
 
 function mapRowsToMessages(rows) {
-  return (rows||[]).map(m=>({ id:m.id, role:m.role, text:m.body, prototype:!!m.prototype, createdAt:m.created_at }));
+  return (rows||[]).map(m=>({
+    id:m.id,
+    role:m.role,
+    text:m.body,
+    prototype:!!m.prototype,
+    createdAt:m.created_at,
+    inputTokens:m.input_tokens??0,
+    outputTokens:m.output_tokens??0,
+  }));
 }
 
 async function callProviderApi(provider,modelId,apiKey,priorMessages,newText,replyLanguage='en'){
@@ -255,6 +267,7 @@ export default function DesktopChatPage() {
   const [attachMenuPos,    setAttachMenuPos]    = useState(null);
   const [modelMenuOpen,    setModelMenuOpen]    = useState(false);
   const [modelMenuPos,     setModelMenuPos]     = useState(null);
+  const { menuMounted: modelMenuMounted, menuClass: modelMenuAnimClass, onMenuAnimationEnd: onModelMenuAnimationEnd } = useGenieMenu(modelMenuOpen);
   const [contextMenu,      setContextMenu]      = useState(null);
   const [dailyUsage,       setDailyUsage]       = useState(() => readDailyUsage());
   const [weeklyUsage,      setWeeklyUsage]      = useState(() => readWeeklyUsage());
@@ -425,7 +438,7 @@ export default function DesktopChatPage() {
   }, [attachMenuOpen]);
 
   useLayoutEffect(()=>{
-    if(!modelMenuOpen){setModelMenuPos(null);return;}
+    if(!modelMenuMounted){setModelMenuPos(null);return;}
     const update=()=>{
       const btn=modelPickerBtnRef.current; if(!btn)return;
       const r=btn.getBoundingClientRect();
@@ -438,7 +451,7 @@ export default function DesktopChatPage() {
     update();
     window.addEventListener('resize',update);
     return()=>window.removeEventListener('resize',update);
-  }, [modelMenuOpen]);
+  }, [modelMenuMounted]);
 
   useEffect(()=>{
     if(!modelMenuOpen)return;
@@ -505,14 +518,14 @@ export default function DesktopChatPage() {
         const apiKey=apiKeys[selectedModel.provider];
         if(!apiKey)throw new Error(`No API key saved for ${selectedModel.label}. Add one in Settings → API Keys.`);
         const result=await callProviderApi(selectedModel.provider,selectedModel.id,apiKey,messages,text,language);
-        const data=await callApi('/chat',{method:'POST',body:{message:text,conversationId,external:true,assistantReply:result.text}});
+        const inTok=result.inputTokens||Math.ceil(text.length/4);
+        const outTok=result.outputTokens||Math.ceil(result.text.length/4);
+        const data=await callApi('/chat',{method:'POST',body:{message:text,conversationId,external:true,assistantReply:result.text,inputTokens:inTok,outputTokens:outTok}});
         const convId=data.conversationId;
         if(convId)setConversationId(convId);
         await refreshConversations();
         if(convId)await loadMessages(convId);
 
-        const inTok=result.inputTokens||Math.ceil(text.length/4);
-        const outTok=result.outputTokens||Math.ceil(result.text.length/4);
         const cost=calcCost(selectedModel.id,inTok,outTok);
         bumpDailyCost(cost); bumpWeeklyCost(cost);
       } else {
@@ -521,7 +534,11 @@ export default function DesktopChatPage() {
         if(cid)setConversationId(cid);
         await refreshConversations();
         if(cid)await loadMessages(cid);
-        // Modulon runs on your own server — no external API cost
+
+        const inTok=data.inputTokens||Math.ceil(text.length/4);
+        const outTok=data.outputTokens||Math.ceil((data.response||'').length/4);
+        const cost=calcCost('modulon',inTok,outTok);
+        bumpDailyCost(cost); bumpWeeklyCost(cost);
       }
     } catch(e){
       setErr(e.message||String(e));
@@ -744,15 +761,20 @@ export default function DesktopChatPage() {
               <div className="no-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto pb-4">
                 {messages.map(msg=>(
                   <div key={msg.id} className={`flex ${msg.role==='user'?'justify-end':'justify-start'}`}>
-                    <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                      msg.role==='user'
-                        ?'bg-zinc-900 text-white dark:bg-white dark:text-black rounded-br-md'
-                        :msg.error
-                          ?'bg-red-500/15 text-red-800 border border-red-500/30 dark:text-red-100/90 dark:border-red-500/25 rounded-bl-md'
-                          :'bg-white text-zinc-800 border border-zinc-200/90 shadow-sm dark:bg-white/[0.06] dark:text-white/85 dark:border-white/[0.08] dark:shadow-none rounded-bl-md'
-                    }`}>
-                      <ChatMessageContent text={msg.text} />
-                      {msg.prototype&&<p className="mt-2 text-[10px] font-mono uppercase tracking-wider text-zinc-500 dark:text-white/35">prototype reply</p>}
+                    <div className={`max-w-[85%] ${msg.role==='assistant'?'flex flex-col':''}`}>
+                      <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                        msg.role==='user'
+                          ?'bg-zinc-900 text-white dark:bg-white dark:text-black rounded-br-md'
+                          :msg.error
+                            ?'bg-red-500/15 text-red-800 border border-red-500/30 dark:text-red-100/90 dark:border-red-500/25 rounded-bl-md'
+                            :'bg-white text-zinc-800 border border-zinc-200/90 shadow-sm dark:bg-white/[0.06] dark:text-white/85 dark:border-white/[0.08] dark:shadow-none rounded-bl-md'
+                      }`}>
+                        <ChatMessageContent text={msg.text} />
+                        {msg.prototype&&<p className="mt-2 text-[10px] font-mono uppercase tracking-wider text-zinc-500 dark:text-white/35">prototype reply</p>}
+                      </div>
+                      {msg.role==='assistant'&&!msg.error?(
+                        <MessageTokenCounter outputTokens={msg.outputTokens} />
+                      ):null}
                     </div>
                   </div>
                 ))}
@@ -844,14 +866,15 @@ export default function DesktopChatPage() {
                 <span className="min-w-0 truncate">{selectedModel.label}</span>
                 <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden strokeWidth={2} />
               </button>
-              {modelMenuOpen&&modelMenuPos&&(
+              {modelMenuMounted&&modelMenuPos&&(
                 <div ref={modelSelectMenuRef} role="menu" aria-label="Models"
-                  className="fixed z-[80] w-56 overflow-hidden rounded-xl border border-zinc-200/90 bg-white py-1 text-sm shadow-xl dark:border-white/[0.12] dark:bg-[#121214]"
-                  style={{left:modelMenuPos.left,bottom:modelMenuPos.bottom}}>
-                  <div className="max-h-72 overflow-y-auto no-scrollbar">
+                  className={`fixed z-[80] w-56 overflow-hidden rounded-3xl border border-zinc-200/90 bg-white py-1.5 text-sm shadow-xl dark:border-white/[0.12] dark:bg-[#121214] ${modelMenuAnimClass}`}
+                  style={{left:modelMenuPos.left,bottom:modelMenuPos.bottom}}
+                  onAnimationEnd={onModelMenuAnimationEnd}>
+                  <div className="model-picker-menu__list max-h-72 overflow-y-auto no-scrollbar">
                     <button type="button" role="menuitem"
                       onClick={()=>{setSelectedModel({id:'modulon',label:MODULON_CHAT_MODEL_LABEL,provider:'modulon'});setModelMenuOpen(false);}}
-                      className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${selectedModel.id==='modulon'?'bg-zinc-100 font-medium text-zinc-900 dark:bg-white/[0.08] dark:text-white':'text-zinc-800 hover:bg-zinc-50 dark:text-white/85 dark:hover:bg-white/[0.05]'}`}>
+                      className={modelPickerItemClass(selectedModel.id==='modulon')}>
                       <span className="min-w-0 flex-1 truncate">{MODULON_CHAT_MODEL_LABEL}</span>
                       {selectedModel.id==='modulon'&&<Check className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden/>}
                     </button>
@@ -862,7 +885,7 @@ export default function DesktopChatPage() {
                         {group.models.map(m=>(
                           <button key={m.id} type="button" role="menuitem"
                             onClick={()=>{setSelectedModel({id:m.id,label:m.label,provider:pid});setModelMenuOpen(false);}}
-                            className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors ${selectedModel.id===m.id?'bg-zinc-100 font-medium text-zinc-900 dark:bg-white/[0.08] dark:text-white':'text-zinc-800 hover:bg-zinc-50 dark:text-white/85 dark:hover:bg-white/[0.05]'}`}>
+                            className={modelPickerItemClass(selectedModel.id===m.id)}>
                             <span className="min-w-0 flex-1 truncate">{m.label}</span>
                             {selectedModel.id===m.id&&<Check className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden/>}
                           </button>
