@@ -1,4 +1,4 @@
-# Cloudflare Pages / Netlify-style SPA fallback (copied to dist/ by Vite).
-# When the frontend is on Pages and the API is elsewhere, set VITE_PUBLIC_API_ORIGIN
-# at build time so the app calls that host for /api (see README).
-/*    /index.html   200
+# Cloudflare Pages — proxy API to Railway (same-origin /api, no CORS).
+/api/*  https://modulon-landing-production.up.railway.app/api/:splat  200
+# SPA fallback
+/*      /index.html   200

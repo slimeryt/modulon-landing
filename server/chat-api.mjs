@@ -18,6 +18,7 @@
  * serves the React SPA and `/api/*` (Railway / Docker single process).
  */
 
+import cors      from 'cors';
 import express   from 'express';
 import Database  from 'better-sqlite3';
 import { spawn } from 'child_process';
@@ -174,15 +175,24 @@ async function extractUserId(req) {
 }
 
 // ── Express ───────────────────────────────────────────────────────────────────
+const CORS_ORIGINS = (process.env.CORS_ORIGINS
+  || 'https://modulon.xyz,https://www.modulon.xyz,http://localhost:5181,http://127.0.0.1:5181')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 const app = express();
+app.use(cors({
+  origin(origin, cb) {
+    if (!origin) return cb(null, true);
+    if (CORS_ORIGINS.includes(origin)) return cb(null, true);
+    if (process.env.NODE_ENV !== 'production') return cb(null, true);
+    cb(null, false);
+  },
+  methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 app.use(express.json());
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.header('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
-  if (req.method === 'OPTIONS') return res.sendStatus(200);
-  next();
-});
 
 // ── SQLite ────────────────────────────────────────────────────────────────────
 const db = new Database(DB_PATH);
@@ -504,42 +514,51 @@ async function askModulon(message, history = []) {
 }
 
 app.post('/api/chat', async (req, res) => {
-  const uid = await extractUserId(req);
-  if (FIREBASE_CONFIGURED && !uid) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const uid = await extractUserId(req);
+    if (FIREBASE_CONFIGURED && !uid) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { message, conversationId, assistantReply, external } = req.body ?? {};
-  if (!message?.trim()) return res.status(400).json({ error: 'Empty message' });
+    const { message, conversationId, assistantReply, external } = req.body ?? {};
+    if (!message?.trim()) return res.status(400).json({ error: 'Empty message' });
 
-  let convId = conversationId;
-  if (!convId) {
-    convId = crypto.randomUUID();
-    q.insertConvo.run(convId, message.slice(0, 60), uid ?? null);
-  } else {
-    // Verify the conversation belongs to this user
-    const convo = q.getConvo.get(convId);
-    if (convo && FIREBASE_CONFIGURED && uid && convo.user_id && convo.user_id !== uid)
-      return res.status(403).json({ error: 'Forbidden' });
-  }
+    let convId = conversationId;
+    if (!convId) {
+      convId = crypto.randomUUID();
+      q.insertConvo.run(convId, message.slice(0, 60), uid ?? null);
+    } else {
+      const convo = q.getConvo.get(convId);
+      if (convo && FIREBASE_CONFIGURED && uid && convo.user_id && convo.user_id !== uid)
+        return res.status(403).json({ error: 'Forbidden' });
+    }
 
-  q.insertMsg.run(crypto.randomUUID(), convId, 'user', message, 0);
+    q.insertMsg.run(crypto.randomUUID(), convId, 'user', message, 0);
 
-  if (q.msgCount.get(convId).n === 1) {
-    q.updateTitle.run(message.slice(0, 60), convId);
-  }
+    if (q.msgCount.get(convId).n === 1) {
+      q.updateTitle.run(message.slice(0, 60), convId);
+    }
 
-  if (external && assistantReply?.trim()) {
-    q.insertMsg.run(crypto.randomUUID(), convId, 'assistant', assistantReply, 0);
+    if (external && assistantReply?.trim()) {
+      q.insertMsg.run(crypto.randomUUID(), convId, 'assistant', assistantReply, 0);
+      q.touchConvo.run(convId);
+      return res.json({ conversationId: convId, response: assistantReply });
+    }
+
+    const history = convoHistoryRows(convId);
+    const { reply, proto } = await askModulon(message, history);
+
+    q.insertMsg.run(crypto.randomUUID(), convId, 'assistant', reply, proto ? 1 : 0);
     q.touchConvo.run(convId);
-    return res.json({ conversationId: convId, response: assistantReply });
+
+    res.json({ conversationId: convId, response: reply });
+  } catch (err) {
+    console.error('[chat]', err);
+    res.status(500).json({ error: err.message || 'Chat failed' });
   }
+});
 
-  const history = convoHistoryRows(convId);
-  const { reply, proto } = await askModulon(message, history);
-
-  q.insertMsg.run(crypto.randomUUID(), convId, 'assistant', reply, proto ? 1 : 0);
-  q.touchConvo.run(convId);
-
-  res.json({ conversationId: convId, response: reply });
+app.use((err, _req, res, _next) => {
+  console.error('[api]', err);
+  res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
 // ── Static SPA (production: `dist/` next to this file’s project root) ─────────
@@ -562,10 +581,13 @@ if (SERVE_SPA) {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 if (MODULON_BACKEND !== 'ollama') startPython();
 console.log(`[modulon] M0.1 backend: ${MODULON_BACKEND}, ollama model: ${MODULON_OLLAMA_MODEL}`);
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, () => {
   const base = `http://${HOST}:${PORT}`;
   console.log(`\nModulon API → ${base}/api/health`);
   if (SERVE_SPA) console.log(`Modulon app  → ${base}/`);
   else console.log('(No dist/index.html — run `npm run build` to serve the SPA from this process.)');
   console.log('');
 });
+// Ollama on CPU can take a few minutes on first reply.
+server.timeout = 300_000;
+server.keepAliveTimeout = 310_000;
