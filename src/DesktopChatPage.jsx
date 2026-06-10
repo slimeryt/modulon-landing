@@ -502,7 +502,6 @@ export default function DesktopChatPage() {
       if(selectedModel.provider!=='modulon'){
         const apiKey=apiKeys[selectedModel.provider];
         if(!apiKey)throw new Error(`No API key saved for ${selectedModel.label}. Add one in Settings → API Keys.`);
-
         const result=await callProviderApi(selectedModel.provider,selectedModel.id,apiKey,messages,text,language);
         const data=await callApi('/chat',{method:'POST',body:{message:text,conversationId,external:true,assistantReply:result.text}});
         const convId=data.conversationId;
@@ -515,7 +514,7 @@ export default function DesktopChatPage() {
         const cost=calcCost(selectedModel.id,inTok,outTok);
         bumpDailyCost(cost); bumpWeeklyCost(cost);
       } else {
-        const data=await callApi('/chat',{method:'POST',body:{message:text,conversationId}});
+        const data=await callApi('/chat',{method:'POST',body:{message:text,conversationId,language}});
         const cid=data.conversationId;
         if(cid)setConversationId(cid);
         await refreshConversations();

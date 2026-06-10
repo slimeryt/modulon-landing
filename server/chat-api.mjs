@@ -430,11 +430,29 @@ function defaultOllamaModel() {
   return 'llama3.1:8b';
 }
 
+const MODULON_LANG_LABELS = {
+  en: 'English',
+  de: 'German',
+  es: 'Spanish',
+  fr: 'French',
+  pt: 'Portuguese',
+  zh: 'Chinese',
+  ja: 'Japanese',
+};
+
+function modulonSystemPrompt(langCode = 'en') {
+  if (process.env.MODULON_SYSTEM_PROMPT) return process.env.MODULON_SYSTEM_PROMPT;
+  const base = String(langCode || 'en').split('-')[0].toLowerCase();
+  const label = MODULON_LANG_LABELS[base] || MODULON_LANG_LABELS.en;
+  return (
+    `You are Modulon, a helpful AI assistant. Always reply in the same language as the user's latest message. ` +
+    `If the language is unclear, use ${label}. Do not default to Chinese or Russian unless the user is writing in that language. ` +
+    `Do not mention other AI brands or underlying models.`
+  );
+}
+
 const MODULON_OLLAMA_MODEL = defaultOllamaModel();
 const MODULON_BACKEND = defaultModulonBackend();
-const MODULON_SYSTEM_PROMPT =
-  process.env.MODULON_SYSTEM_PROMPT ||
-  'You are Modulon, a helpful AI assistant. Reply in the same language as the user. Do not mention other AI brands or underlying models.';
 
 function resolveOllamaBase(url) {
   const raw = (url || process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').trim().replace(/\/$/, '');
@@ -497,7 +515,7 @@ async function chatOllama({ message, model, history = [], systemPrompt, baseUrl 
 }
 
 /** Modulon M0.1 — uses local Ollama by default; falls back to the GPT-2 bridge. */
-async function askModulon(message, history = []) {
+async function askModulon(message, history = [], langCode = 'en') {
   if (MODULON_BACKEND === 'python') {
     return { reply: await askPython(message), proto: false };
   }
@@ -508,7 +526,7 @@ async function askModulon(message, history = []) {
         message,
         model: MODULON_OLLAMA_MODEL,
         history,
-        systemPrompt: MODULON_SYSTEM_PROMPT,
+        systemPrompt: modulonSystemPrompt(langCode),
       });
       return { reply: text || '…', proto: false };
     } catch (err) {
@@ -532,7 +550,7 @@ app.post('/api/chat', async (req, res) => {
     const uid = await extractUserId(req);
     if (FIREBASE_CONFIGURED && !uid) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { message, conversationId, assistantReply, external } = req.body ?? {};
+    const { message, conversationId, assistantReply, external, language } = req.body ?? {};
     if (!message?.trim()) return res.status(400).json({ error: 'Empty message' });
 
     let convId = conversationId;
@@ -558,7 +576,7 @@ app.post('/api/chat', async (req, res) => {
     }
 
     const history = convoHistoryRows(convId);
-    const { reply, proto } = await askModulon(message, history);
+    const { reply, proto } = await askModulon(message, history, language || 'en');
 
     q.insertMsg.run(crypto.randomUUID(), convId, 'assistant', reply, proto ? 1 : 0);
     q.touchConvo.run(convId);

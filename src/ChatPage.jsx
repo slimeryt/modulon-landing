@@ -1035,7 +1035,7 @@ export default function ChatPage() {
       } else {
         const data = await callApi('/chat', {
           method: 'POST',
-          body: { message: text, conversationId },
+          body: { message: text, conversationId, language },
         });
         const convId = data.conversationId;
         if (convId) setConversationId(convId);
@@ -1988,7 +1988,7 @@ export default function ChatPage() {
                     <div className="flex flex-col gap-2 w-full max-w-xs">
                       <div className="flex items-center justify-between rounded-full border border-zinc-200/80 bg-zinc-50/80 px-4 py-2 dark:border-white/[0.08] dark:bg-white/[0.04]">
                         <span className="text-xs font-medium text-zinc-500 dark:text-white/40">Website</span>
-                        <span className="font-mono text-xs font-semibold text-zinc-900 dark:text-white">v0.1.0-BETA</span>
+                        <span className="font-mono text-xs font-semibold text-zinc-900 dark:text-white">v0.1.05-BETA</span>
                       </div>
                       <div className="flex items-center justify-between rounded-full border border-zinc-200/80 bg-zinc-50/80 px-4 py-2 dark:border-white/[0.08] dark:bg-white/[0.04]">
                         <span className="text-xs font-medium text-zinc-500 dark:text-white/40">AI Model</span>
