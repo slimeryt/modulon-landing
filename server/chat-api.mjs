@@ -426,7 +426,7 @@ function defaultModulonBackend() {
 
 function defaultOllamaModel() {
   if (process.env.OLLAMA_MODEL) return process.env.OLLAMA_MODEL;
-  if (process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production') return 'llama3.2:3b';
+  if (process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production') return 'llama3.2:1b';
   return 'llama3.1:8b';
 }
 
@@ -473,11 +473,22 @@ async function chatOllama({ message, model, history = [], systemPrompt, baseUrl 
   const r = await fetch(`${ollamaBase}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, messages: chatMessages, stream: false }),
-    signal: AbortSignal.timeout(120_000),
+    body: JSON.stringify({
+      model,
+      messages: chatMessages,
+      stream: false,
+      options: {
+        num_ctx: Number(process.env.OLLAMA_NUM_CTX || 2048),
+        num_predict: Number(process.env.OLLAMA_NUM_PREDICT || 512),
+      },
+    }),
+    signal: AbortSignal.timeout(Number(process.env.OLLAMA_CHAT_TIMEOUT_MS || 180_000)),
   });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || `Ollama error ${r.status}`);
+  if (!r.ok) {
+    const detail = typeof data.error === 'string' ? data.error : JSON.stringify(data.error || data);
+    throw new Error(detail || `Ollama error ${r.status}`);
+  }
   return {
     text: data.message?.content ?? '',
     inputTokens: data.prompt_eval_count ?? 0,
@@ -501,7 +512,10 @@ async function askModulon(message, history = []) {
       });
       return { reply: text || '…', proto: false };
     } catch (err) {
-      if (MODULON_BACKEND === 'ollama') throw err;
+      console.error('[modulon] Ollama error:', err.message);
+      if (MODULON_BACKEND === 'ollama') {
+        return { reply: `⚠ Modulon is temporarily unavailable. (${err.message})`, proto: true };
+      }
       console.warn('[modulon] Ollama unavailable, falling back to GPT-2:', err.message);
     }
   }
