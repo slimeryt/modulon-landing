@@ -30,6 +30,7 @@ import {
 import { useAuth, mapAuthError } from './AuthContext';
 import { useLanguage } from './LanguageContext';
 import { providerReplyPrompt } from './languages';
+import ChatMessageContent from './ChatMessageContent';
 import { useTheme } from './ThemeContext';
 import { translatedHomeGreeting } from './i18n/homeGreeting';
 import modulonIcon from './assets/icons/Modulon_Icon.png';
@@ -744,7 +745,7 @@ export default function DesktopChatPage() {
                           ?'bg-red-500/15 text-red-800 border border-red-500/30 dark:text-red-100/90 dark:border-red-500/25 rounded-bl-md'
                           :'bg-white text-zinc-800 border border-zinc-200/90 shadow-sm dark:bg-white/[0.06] dark:text-white/85 dark:border-white/[0.08] dark:shadow-none rounded-bl-md'
                     }`}>
-                      <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+                      <ChatMessageContent text={msg.text} />
                       {msg.prototype&&<p className="mt-2 text-[10px] font-mono uppercase tracking-wider text-zinc-500 dark:text-white/35">prototype reply</p>}
                     </div>
                   </div>
