@@ -1,7 +1,7 @@
 // Modulon service worker — network-first, no aggressive caching.
 // Exists primarily to satisfy PWA installability requirements.
 
-const CACHE = 'modulon-v1';
+const CACHE = 'modulon-v2';
 
 // Assets to pre-cache so the app shell loads instantly after first visit.
 const PRECACHE = ['/', '/chat', '/login', '/signup'];

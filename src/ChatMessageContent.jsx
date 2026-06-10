@@ -1,20 +1,40 @@
-/** Renders assistant/user chat text with fenced and inline code blocks. */
+/** Renders chat text with fenced and inline code blocks. */
 
-const FENCE_RE = /```([\w+-]*)\r?\n([\s\S]*?)```/g;
+function normalizeMarkdown(text) {
+  return String(text).replace(/\uFF40/g, '`');
+}
 
 function parseParts(text) {
-  const parts = [];
-  let last = 0;
-  let m;
-  const re = new RegExp(FENCE_RE.source, 'g');
-  while ((m = re.exec(text)) !== null) {
-    if (m.index > last) parts.push({ kind: 'text', value: text.slice(last, m.index) });
-    parts.push({ kind: 'code', lang: m[1], value: m[2].replace(/\n$/, '') });
-    last = re.lastIndex;
+  const normalized = normalizeMarkdown(text);
+  const chunks = normalized.split('```');
+  if (chunks.length < 3) {
+    return [{ kind: 'text', value: normalized }];
   }
-  if (last < text.length) parts.push({ kind: 'text', value: text.slice(last) });
-  if (!parts.length) parts.push({ kind: 'text', value: text });
-  return parts;
+
+  const parts = [];
+  for (let i = 0; i < chunks.length; i++) {
+    if (i % 2 === 0) {
+      if (chunks[i]) parts.push({ kind: 'text', value: chunks[i] });
+      continue;
+    }
+
+    const block = chunks[i].replace(/^\r?\n/, '');
+    const nl = block.indexOf('\n');
+    let lang = '';
+    let code = block;
+
+    if (nl !== -1) {
+      const firstLine = block.slice(0, nl).trim();
+      if (/^[\w+#.-]+$/.test(firstLine)) {
+        lang = firstLine;
+        code = block.slice(nl + 1);
+      }
+    }
+
+    parts.push({ kind: 'code', lang, value: code.replace(/\s+$/, '') });
+  }
+
+  return parts.length ? parts : [{ kind: 'text', value: normalized }];
 }
 
 function InlineText({ value }) {
@@ -41,7 +61,7 @@ function InlineText({ value }) {
 
 function CodeBlock({ lang, code }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-zinc-200/90 bg-zinc-50 dark:border-white/10 dark:bg-black/40">
+    <div className="my-2 overflow-hidden rounded-lg border border-zinc-200/90 bg-zinc-50 dark:border-white/10 dark:bg-black/40">
       {lang ? (
         <div className="border-b border-zinc-200/80 px-3 py-1 font-mono text-[10px] uppercase tracking-wider text-zinc-500 dark:border-white/10 dark:text-white/40">
           {lang}
@@ -57,12 +77,12 @@ function CodeBlock({ lang, code }) {
 export default function ChatMessageContent({ text }) {
   if (!text) return null;
   const parts = parseParts(text);
-  const onlyText = parts.length === 1 && parts[0].kind === 'text';
+  const hasCode = parts.some((p) => p.kind === 'code');
 
-  if (onlyText) return <InlineText value={parts[0].value} />;
+  if (!hasCode) return <InlineText value={text} />;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       {parts.map((part, i) => {
         if (part.kind === 'code') {
           return <CodeBlock key={i} lang={part.lang} code={part.value} />;
