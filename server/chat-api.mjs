@@ -9,6 +9,7 @@
  *   POST /api/chat/conversations/:id/messages   { role, body, prototype? }
  *   DEL  /api/chat/conversations/:id
  *   POST /api/chat   { message, conversationId?, external?, assistantReply? }
+ *   Modulon M0.1 uses local Ollama (OLLAMA_MODEL) with GPT-2 fallback — see MODULON_BACKEND.
  *
  * Run:  node server/chat-api.mjs
  *       npm run dev:all   (Vite + API together)
@@ -324,8 +325,28 @@ app.post('/api/auth/send-reset-email', async (req, res) => {
   }
 });
 
-app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, modelReady: pythonReady });
+app.get('/api/health', async (_req, res) => {
+  let ollamaReady = null;
+  if (MODULON_BACKEND === 'ollama' || MODULON_BACKEND === 'ollama-first') {
+    try {
+      const r = await fetch(`${resolveOllamaBase()}/api/tags`, { signal: AbortSignal.timeout(5000) });
+      ollamaReady = r.ok;
+    } catch {
+      ollamaReady = false;
+    }
+  }
+  const modelReady =
+    MODULON_BACKEND === 'python' ? pythonReady
+    : MODULON_BACKEND === 'ollama' ? ollamaReady
+    : ollamaReady || pythonReady;
+
+  res.json({
+    ok: true,
+    modelReady,
+    modulonBackend: MODULON_BACKEND,
+    ollamaModel: MODULON_OLLAMA_MODEL,
+    ollamaReady,
+  });
 });
 
 app.get('/api/chat/conversations', async (req, res) => {
@@ -387,6 +408,101 @@ app.post('/api/chat/conversations/:id/messages', async (req, res) => {
   res.json({ ok: true });
 });
 
+function defaultModulonBackend() {
+  if (process.env.MODULON_BACKEND) return process.env.MODULON_BACKEND.toLowerCase();
+  if (process.env.RAILWAY_ENVIRONMENT) return 'ollama';
+  return 'ollama-first';
+}
+
+function defaultOllamaModel() {
+  if (process.env.OLLAMA_MODEL) return process.env.OLLAMA_MODEL;
+  if (process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production') return 'llama3.2:3b';
+  return 'llama3.1:8b';
+}
+
+const MODULON_OLLAMA_MODEL = defaultOllamaModel();
+const MODULON_BACKEND = defaultModulonBackend();
+const MODULON_SYSTEM_PROMPT =
+  process.env.MODULON_SYSTEM_PROMPT ||
+  'You are Modulon, a helpful AI assistant. Reply in the same language as the user. Do not mention other AI brands or underlying models.';
+
+function resolveOllamaBase(url) {
+  const raw = (url || process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').trim().replace(/\/$/, '');
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error('Invalid Ollama URL.');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Ollama URL must use http or https.');
+  }
+  const host = parsed.hostname.toLowerCase();
+  const localHosts = new Set(['localhost', '127.0.0.1', '::1', 'host.docker.internal']);
+  if (process.env.OLLAMA_ALLOWED_HOST) localHosts.add(process.env.OLLAMA_ALLOWED_HOST.toLowerCase());
+  if (!localHosts.has(host)) {
+    throw new Error('Ollama URL must point to this machine (127.0.0.1 or localhost).');
+  }
+  return raw;
+}
+
+function convoHistoryRows(convId) {
+  return q.listMessages.all(convId)
+    .slice(0, -1)
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .map((m) => ({ role: m.role, content: m.body }));
+}
+
+async function chatOllama({ message, model, history = [], systemPrompt, baseUrl }) {
+  const ollamaBase = resolveOllamaBase(baseUrl);
+  const chatMessages = [
+    ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+    ...history,
+    { role: 'user', content: message },
+  ];
+  const r = await fetch(`${ollamaBase}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, messages: chatMessages, stream: false }),
+    signal: AbortSignal.timeout(120_000),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `Ollama error ${r.status}`);
+  return {
+    text: data.message?.content ?? '',
+    inputTokens: data.prompt_eval_count ?? 0,
+    outputTokens: data.eval_count ?? 0,
+  };
+}
+
+/** Modulon M0.1 — uses local Ollama by default; falls back to the GPT-2 bridge. */
+async function askModulon(message, history = []) {
+  if (MODULON_BACKEND === 'python') {
+    return { reply: await askPython(message), proto: false };
+  }
+
+  if (MODULON_BACKEND === 'ollama' || MODULON_BACKEND === 'ollama-first') {
+    try {
+      const { text } = await chatOllama({
+        message,
+        model: MODULON_OLLAMA_MODEL,
+        history,
+        systemPrompt: MODULON_SYSTEM_PROMPT,
+      });
+      return { reply: text || '…', proto: false };
+    } catch (err) {
+      if (MODULON_BACKEND === 'ollama') throw err;
+      console.warn('[modulon] Ollama unavailable, falling back to GPT-2:', err.message);
+    }
+  }
+
+  try {
+    return { reply: await askPython(message), proto: false };
+  } catch (err) {
+    return { reply: `⚠ ${err.message}`, proto: true };
+  }
+}
+
 app.post('/api/chat', async (req, res) => {
   const uid = await extractUserId(req);
   if (FIREBASE_CONFIGURED && !uid) return res.status(401).json({ error: 'Unauthorized' });
@@ -417,14 +533,8 @@ app.post('/api/chat', async (req, res) => {
     return res.json({ conversationId: convId, response: assistantReply });
   }
 
-  let reply;
-  let proto = false;
-  try {
-    reply = await askPython(message);
-  } catch (err) {
-    reply = `⚠ ${err.message}`;
-    proto = true;
-  }
+  const history = convoHistoryRows(convId);
+  const { reply, proto } = await askModulon(message, history);
 
   q.insertMsg.run(crypto.randomUUID(), convId, 'assistant', reply, proto ? 1 : 0);
   q.touchConvo.run(convId);
@@ -450,7 +560,8 @@ if (SERVE_SPA) {
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-startPython();
+if (MODULON_BACKEND !== 'ollama') startPython();
+console.log(`[modulon] M0.1 backend: ${MODULON_BACKEND}, ollama model: ${MODULON_OLLAMA_MODEL}`);
 app.listen(PORT, HOST, () => {
   const base = `http://${HOST}:${PORT}`;
   console.log(`\nModulon API → ${base}/api/health`);

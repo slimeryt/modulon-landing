@@ -1,9 +1,10 @@
-# Railway / Docker: Vite build + Node API + Python inference (GPT-2)
+# Railway / Docker: Vite build + Node API + Ollama (Modulon M0.1)
 FROM node:20-bookworm-slim
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 python3-pip \
+  && apt-get install -y --no-install-recommends python3 python3-pip curl ca-certificates zstd \
   && ln -sf /usr/bin/python3 /usr/local/bin/python \
+  && curl -fsSL https://ollama.com/install.sh | sh \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -22,7 +23,14 @@ RUN npm run build \
 ENV NODE_ENV=production
 ENV API_HOST=0.0.0.0
 ENV PYTHON=python3
+# Modulon M0.1 — CPU-friendly default; override on Railway if you have more RAM.
+ENV MODULON_BACKEND=ollama
+ENV OLLAMA_BASE_URL=http://127.0.0.1:11434
+ENV OLLAMA_MODEL=llama3.2:3b
+ENV OLLAMA_HOST=127.0.0.1:11434
+
+RUN chmod +x scripts/docker-entrypoint.sh
 
 EXPOSE 8080
 
-CMD ["node", "server/chat-api.mjs"]
+CMD ["scripts/docker-entrypoint.sh"]
