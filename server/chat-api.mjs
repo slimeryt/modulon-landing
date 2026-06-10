@@ -426,7 +426,7 @@ function defaultModulonBackend() {
 
 function defaultOllamaModel() {
   if (process.env.OLLAMA_MODEL) return process.env.OLLAMA_MODEL;
-  if (process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production') return 'llama3.2:1b';
+  if (process.env.RAILWAY_ENVIRONMENT || process.env.NODE_ENV === 'production') return 'phi3:mini';
   return 'llama3.1:8b';
 }
 
