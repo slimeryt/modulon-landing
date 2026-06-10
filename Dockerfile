@@ -2,7 +2,9 @@
 FROM node:20-bookworm-slim
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 python3-pip curl ca-certificates zstd \
+  && apt-get install -y --no-install-recommends \
+    python3 python3-pip curl ca-certificates zstd \
+    libgomp1 libstdc++6 \
   && ln -sf /usr/bin/python3 /usr/local/bin/python \
   && curl -fsSL https://ollama.com/install.sh | sh \
   && rm -rf /var/lib/apt/lists/*
@@ -31,6 +33,8 @@ ENV OLLAMA_HOST=127.0.0.1:11434
 ENV OLLAMA_KEEP_ALIVE=24h
 ENV OLLAMA_MAX_LOADED_MODELS=1
 ENV OLLAMA_NUM_PARALLEL=1
+# CPU-only Railway hosts — Vulkan init can segfault llama-server.
+ENV OLLAMA_VULKAN=0
 
 RUN chmod +x scripts/docker-entrypoint.sh
 
