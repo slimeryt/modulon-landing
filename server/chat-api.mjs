@@ -482,8 +482,9 @@ function sanitizePersonalization(raw) {
 }
 
 const THINK_MODE_SYSTEM_HINT =
-  'Think mode is ON. First write brief private reasoning inside <thinking>...</thinking> tags. ' +
-  'Then write the user-facing answer after the closing tag only — no preamble or repeat of the reasoning.';
+  'Think mode is ON for complex questions only. First write brief private reasoning inside <thinking>...</thinking> tags, ' +
+  'then write the user-facing answer after the closing tag.\n' +
+  'If the user asks for the current time, date, day, or sends a short greeting, answer in one direct sentence only — no <thinking> tags.';
 
 function parseThinkResponse(text) {
   const raw = String(text || '');
@@ -532,19 +533,154 @@ const SIMPLE_GREETING_RE = new RegExp(
 const IDENTITY_LEAK_RE =
   /\b(as an? |i'?m an? )?(ai|artificial intelligence|language model|large language model|chatbot|virtual assistant)\b|\b(developed|created|made) by (microsoft|openai|google|anthropic|meta)\b|\bmicrosoft'?s?\b.*\b(ai|copilot|assistant)\b|\b(copilot|chatgpt|gemini|claude|phi-?3)\b|\bmy purpose is to (assist|help)\b/i;
 
+const TIME_QUESTION_RE =
+  /\b(what(?:'s| is) the (time|date|day)|what (time|day) is it|current (time|date)|today(?:'s)? date|tell me the time|know what time)\b/i;
+
 const GREETING_REPLIES = {
-  en: [
-    "Hey! I'm doing well — what can I help you with?",
-    "Hello! Good to hear from you. What's on your mind?",
-    "Hi there! How can I help today?",
-  ],
-  de: ['Hallo! Wie kann ich dir heute helfen?', 'Hi! Schön von dir zu hören — was kann ich für dich tun?'],
-  es: ['¡Hola! ¿En qué puedo ayudarte hoy?', '¡Hola! ¿Qué tienes en mente?'],
-  fr: ['Salut ! Comment puis-je t’aider aujourd’hui ?', 'Bonjour ! De quoi as-tu besoin ?'],
-  pt: ['Olá! Como posso ajudar hoje?', 'Oi! Em que posso ajudar?'],
-  zh: ['你好！今天我能帮你什么？', '嗨！有什么我可以帮你的吗？'],
-  ja: ['こんにちは！今日は何をお手伝いしましょうか？', 'やあ！何かお手伝いできることはありますか？'],
+  en: {
+    morning: ['Good morning! How can I help you today?', "Morning! What's on your mind?"],
+    afternoon: ['Good afternoon! What can I help you with?', "Afternoon! How's it going?"],
+    evening: ['Good evening! How can I help?', "Evening! What's on your mind?"],
+    default: ["Hey! I'm doing well — what can I help you with?", 'Hi there! How can I help today?'],
+  },
+  de: {
+    morning: ['Guten Morgen! Wie kann ich dir helfen?', 'Morgen! Was kann ich für dich tun?'],
+    afternoon: ['Guten Tag! Wobei kann ich helfen?', 'Hallo! Was beschäftigt dich?'],
+    evening: ['Guten Abend! Wie kann ich helfen?', 'Abend! Was kann ich für dich tun?'],
+    default: ['Hallo! Wie kann ich dir heute helfen?'],
+  },
+  es: {
+    morning: ['¡Buenos días! ¿En qué puedo ayudarte?', '¡Buen día! ¿Qué necesitas?'],
+    afternoon: ['¡Buenas tardes! ¿En qué puedo ayudarte?', '¡Hola! ¿Qué tienes en mente?'],
+    evening: ['¡Buenas noches! ¿Cómo puedo ayudar?', '¡Hola! ¿En qué te ayudo?'],
+    default: ['¡Hola! ¿En qué puedo ayudarte hoy?'],
+  },
+  fr: {
+    morning: ['Bonjour ! Comment puis-je t’aider ?', 'Bon matin ! De quoi as-tu besoin ?'],
+    afternoon: ['Bon après-midi ! Comment puis-je t’aider ?', 'Salut ! De quoi as-tu besoin ?'],
+    evening: ['Bonsoir ! Comment puis-je t’aider ?', 'Bonsoir ! Qu’est-ce qui t’amène ?'],
+    default: ['Salut ! Comment puis-je t’aider aujourd’hui ?'],
+  },
+  pt: {
+    morning: ['Bom dia! Como posso ajudar?', 'Olá! Em que posso ajudar hoje?'],
+    afternoon: ['Boa tarde! Como posso ajudar?', 'Oi! O que você precisa?'],
+    evening: ['Boa noite! Como posso ajudar?', 'Oi! Em que posso ajudar?'],
+    default: ['Olá! Como posso ajudar hoje?'],
+  },
+  zh: {
+    morning: ['早上好！今天我能帮你什么？', '你好！有什么我可以帮你的吗？'],
+    afternoon: ['下午好！有什么我可以帮你的吗？', '你好！需要什么帮助？'],
+    evening: ['晚上好！有什么我可以帮你的吗？', '你好！今晚需要什么帮助？'],
+    default: ['你好！今天我能帮你什么？'],
+  },
+  ja: {
+    morning: ['おはようございます！今日は何をお手伝いしましょうか？', 'こんにちは！何かお手伝いできることはありますか？'],
+    afternoon: ['こんにちは！何かお手伝いできることはありますか？', '午後もよろしく！何をしましょうか？'],
+    evening: ['こんばんは！何かお手伝いできることはありますか？', '夜更かしですね。何か手伝いましょうか？'],
+    default: ['こんにちは！今日は何をお手伝いしましょうか？'],
+  },
 };
+
+function sanitizeTimeZone(raw) {
+  if (typeof raw !== 'string') return null;
+  const tz = raw.trim().slice(0, 64);
+  if (!tz) return null;
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: tz });
+    return tz;
+  } catch {
+    return null;
+  }
+}
+
+function resolveClientDate(clientTime, timeZone) {
+  let date;
+  if (clientTime) {
+    const parsed = new Date(clientTime);
+    if (!Number.isNaN(parsed.getTime())) date = parsed;
+  }
+  if (!date) date = new Date();
+  const tz = sanitizeTimeZone(timeZone) || 'UTC';
+  return { date, tz };
+}
+
+function getHourInTimeZone(clientTime, timeZone) {
+  const { date, tz } = resolveClientDate(clientTime, timeZone);
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hour12: false }).formatToParts(date);
+    const hourPart = parts.find((p) => p.type === 'hour');
+    return hourPart ? Number(hourPart.value) : date.getUTCHours();
+  } catch {
+    return date.getUTCHours();
+  }
+}
+
+function dayPartFromHour(hour) {
+  if (hour < 12) return 'morning';
+  if (hour < 18) return 'afternoon';
+  return 'evening';
+}
+
+function formatUserDateTime(clientTime, timeZone) {
+  const { date, tz } = resolveClientDate(clientTime, timeZone);
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZoneName: 'short',
+    }).format(date);
+  } catch {
+    return date.toUTCString();
+  }
+}
+
+function modulonDateTimeBlock(timeZone, clientTime) {
+  const { tz } = resolveClientDate(clientTime, timeZone);
+  const formatted = formatUserDateTime(clientTime, tz);
+  const part = dayPartFromHour(getHourInTimeZone(clientTime, tz));
+  return (
+    `Current date and time for the user (${tz}): ${formatted}.\n` +
+    `It is ${part} for them. Use this when answering about now, today, schedules, or time-of-day greetings.`
+  );
+}
+
+function isTimeQuestion(message) {
+  const t = String(message || '').trim();
+  if (!t || t.length > 80) return false;
+  return TIME_QUESTION_RE.test(t);
+}
+
+/** Time, date, and greetings always get a direct factual answer — never fake think-mode reasoning. */
+function applyFactualOverrides(message, langCode, timeZone, clientTime, reply, thinking) {
+  if (isTimeQuestion(message)) {
+    return { reply: modulonTimeReply(langCode, timeZone, clientTime), thinking: '' };
+  }
+  if (isSimpleGreeting(message)) {
+    return { reply: modulonGreetingReply(langCode, timeZone, clientTime), thinking: '' };
+  }
+  return { reply, thinking };
+}
+
+function modulonTimeReply(langCode = 'en', timeZone, clientTime) {
+  const formatted = formatUserDateTime(clientTime, timeZone);
+  const base = modulonLangBase(langCode);
+  const replies = {
+    en: `It's ${formatted}.`,
+    de: `Es ist ${formatted}.`,
+    es: `Son las ${formatted}.`,
+    fr: `Il est ${formatted}.`,
+    pt: `São ${formatted}.`,
+    zh: `现在是 ${formatted}。`,
+    ja: `今は ${formatted} です。`,
+  };
+  return replies[base] || replies.en;
+}
 
 function isSimpleGreeting(message) {
   const t = String(message || '').trim();
@@ -552,9 +688,12 @@ function isSimpleGreeting(message) {
   return SIMPLE_GREETING_RE.test(t);
 }
 
-function modulonGreetingReply(langCode = 'en') {
+function modulonGreetingReply(langCode = 'en', timeZone, clientTime) {
   const base = modulonLangBase(langCode);
-  const pool = GREETING_REPLIES[base] || GREETING_REPLIES.en;
+  const hour = getHourInTimeZone(clientTime, timeZone);
+  const part = dayPartFromHour(hour);
+  const langPool = GREETING_REPLIES[base] || GREETING_REPLIES.en;
+  const pool = langPool[part] || langPool.default || GREETING_REPLIES.en.default;
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
@@ -564,7 +703,7 @@ function containsIdentityLeak(text) {
 
 function rewriteIdentityLeaks(text, userMessage, langCode = 'en') {
   if (!containsIdentityLeak(text)) return text;
-  if (isSimpleGreeting(userMessage)) return modulonGreetingReply(langCode);
+  if (isSimpleGreeting(userMessage)) return modulonGreetingReply(langCode, null, null);
   const sentences = String(text).split(/(?<=[.!?])\s+/);
   const cleaned = sentences.filter((s) => !containsIdentityLeak(s)).join(' ').trim();
   if (cleaned) return cleaned;
@@ -590,11 +729,12 @@ function sanitizeModulonReply(raw, userMessage = '', langCode = 'en') {
   return rewriteIdentityLeaks(text, userMessage, langCode);
 }
 
-function modulonSystemPrompt(langCode = 'en', personalization = '', thinkMode = false) {
+function modulonSystemPrompt(langCode = 'en', personalization = '', thinkMode = false, timeZone, clientTime) {
   if (process.env.MODULON_SYSTEM_PROMPT) return process.env.MODULON_SYSTEM_PROMPT;
   const label = modulonLangLabel(langCode);
   let base =
     `You are Modulon, the built-in assistant for the Modulon app.\n` +
+    `${modulonDateTimeBlock(timeZone, clientTime)}\n` +
     `CRITICAL: The user's app language is ${label}. Every reply MUST be written entirely in ${label}.\n` +
     `Do NOT reply in Chinese, Russian, Japanese, or any other language unless the user's latest message is clearly written in that language.\n` +
     `Never say you are an AI, artificial intelligence, language model, or bot. Speak naturally as Modulon.\n` +
@@ -693,15 +833,16 @@ async function chatOllama({ message, model, history = [], systemPrompt, baseUrl,
 }
 
 /** Modulon M0.1 — uses local Ollama by default; falls back to the GPT-2 bridge. */
-async function askModulon(message, history = [], langCode = 'en', personalization = '', thinkMode = false) {
-  if (!thinkMode && isSimpleGreeting(message)) {
-    const reply = modulonGreetingReply(langCode);
-    return { reply, thinking: '', proto: false, inputTokens: 0, outputTokens: 0 };
+async function askModulon(message, history = [], langCode = 'en', personalization = '', thinkMode = false, timeZone, clientTime) {
+  if (isTimeQuestion(message) || isSimpleGreeting(message)) {
+    const { reply, thinking } = applyFactualOverrides(message, langCode, timeZone, clientTime, '', '');
+    return { reply, thinking, proto: false, inputTokens: 0, outputTokens: 0 };
   }
 
   if (MODULON_BACKEND === 'python') {
-    const reply = sanitizeModulonReply(await askPython(message), message, langCode) || '…';
-    return { reply, thinking: '', proto: false, inputTokens: 0, outputTokens: 0 };
+    const raw = sanitizeModulonReply(await askPython(message), message, langCode) || '…';
+    const { reply, thinking } = applyFactualOverrides(message, langCode, timeZone, clientTime, raw, '');
+    return { reply, thinking: thinkMode ? thinking : '', proto: false, inputTokens: 0, outputTokens: 0 };
   }
 
   if (MODULON_BACKEND === 'ollama' || MODULON_BACKEND === 'ollama-first') {
@@ -710,12 +851,14 @@ async function askModulon(message, history = [], langCode = 'en', personalizatio
         message: modulonOllamaUserTurn(message, langCode),
         model: MODULON_OLLAMA_MODEL,
         history,
-        systemPrompt: modulonSystemPrompt(langCode, personalization, thinkMode),
+        systemPrompt: modulonSystemPrompt(langCode, personalization, thinkMode, timeZone, clientTime),
         thinkMode,
       });
-      const parsed = thinkMode ? parseThinkResponse(text) : { thinking: '', reply: text || '…' };
-      const reply = sanitizeModulonReply(parsed.reply, message, langCode) || '…';
-      const thinking = sanitizeModulonReply(parsed.thinking, message, langCode);
+      const parsed = parseThinkResponse(text || '…');
+      let reply = sanitizeModulonReply(parsed.reply, message, langCode) || '…';
+      let thinking = thinkMode ? sanitizeModulonReply(parsed.thinking, message, langCode) : '';
+      ({ reply, thinking } = applyFactualOverrides(message, langCode, timeZone, clientTime, reply, thinking));
+      if (!thinkMode) thinking = '';
       return {
         reply,
         thinking,
@@ -733,8 +876,9 @@ async function askModulon(message, history = [], langCode = 'en', personalizatio
   }
 
   try {
-    const reply = sanitizeModulonReply(await askPython(message), message, langCode) || '…';
-    return { reply, thinking: '', proto: false, inputTokens: 0, outputTokens: 0 };
+    const raw = sanitizeModulonReply(await askPython(message), message, langCode) || '…';
+    const { reply, thinking } = applyFactualOverrides(message, langCode, timeZone, clientTime, raw, '');
+    return { reply, thinking: thinkMode ? thinking : '', proto: false, inputTokens: 0, outputTokens: 0 };
   } catch (err) {
     return { reply: `⚠ ${err.message}`, thinking: '', proto: true, inputTokens: 0, outputTokens: 0 };
   }
@@ -762,6 +906,8 @@ app.post('/api/chat', async (req, res) => {
       chatMemory,
       thinkMode,
       assistantThinking,
+      timeZone,
+      clientTime,
     } = req.body ?? {};
     if (!message?.trim()) return res.status(400).json({ error: 'Empty message' });
 
@@ -812,6 +958,8 @@ app.post('/api/chat', async (req, res) => {
       language || 'en',
       modPersonalization,
       useThinkMode,
+      timeZone,
+      clientTime,
     );
     const inTok = modIn || Math.ceil(message.length / 4);
     const outTok = modOut || Math.ceil(String(reply).length / 4);

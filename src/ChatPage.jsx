@@ -37,6 +37,7 @@ import ChatMemoryToggle from './ChatMemoryToggle';
 import ThinkModeToggle from './ThinkModeToggle';
 import AssistantThinking from './AssistantThinking';
 import { readThinkMode, writeThinkMode } from './modulonThinkMode';
+import { getClientDateTimePayload } from './clientDateTime';
 import { parseThinkResponse, THINK_MODE_SYSTEM_HINT } from './parseThinkResponse';
 import { readPersonalization, readPersonalizationStored } from './modulonPersonalization';
 import { modelPickerItemClass } from './modelPickerMenu';
@@ -1121,6 +1122,7 @@ export default function ChatPage() {
             language,
             chatMemory: chatMemoryEnabled,
             thinkMode,
+            ...getClientDateTimePayload(),
             ...(pers ? { personalization: pers } : {}),
           },
         });

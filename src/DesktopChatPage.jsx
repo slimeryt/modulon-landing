@@ -36,6 +36,7 @@ import ChatMemoryToggle from './ChatMemoryToggle';
 import ThinkModeToggle from './ThinkModeToggle';
 import AssistantThinking from './AssistantThinking';
 import { readThinkMode, writeThinkMode } from './modulonThinkMode';
+import { getClientDateTimePayload } from './clientDateTime';
 import { parseThinkResponse, THINK_MODE_SYSTEM_HINT } from './parseThinkResponse';
 import { readPersonalization, readPersonalizationStored } from './modulonPersonalization';
 import { modelPickerItemClass } from './modelPickerMenu';
@@ -574,7 +575,7 @@ export default function DesktopChatPage() {
         bumpDailyCost(cost); bumpWeeklyCost(cost);
       } else {
         const pers=readPersonalization();
-        const data=await callApi('/chat',{method:'POST',body:{message:text,conversationId,language,chatMemory:chatMemoryEnabled,thinkMode,...(pers?{personalization:pers}:{})}});
+        const data=await callApi('/chat',{method:'POST',body:{message:text,conversationId,language,chatMemory:chatMemoryEnabled,thinkMode,...getClientDateTimePayload(),...(pers?{personalization:pers}:{})}});
         const cid=data.conversationId;
         if(cid)setConversationId(cid);
         await refreshConversations();
