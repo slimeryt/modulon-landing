@@ -10,8 +10,10 @@ import StatusPage from './StatusPage';
 import ChangelogPage from './ChangelogPage';
 import DownloadsPage from './DownloadsPage';
 import CookiesPage from './CookiesPage';
+import AdminPage from './AdminPage';
 import CookieConsent from './CookieConsent';
 import { useAuth } from './AuthContext';
+import { isAdminEmail } from './adminConfig';
 
 function RequireAuth({ children }) {
   const { firebaseConfigured, ready, user } = useAuth();
@@ -27,6 +29,29 @@ function RequireAuth({ children }) {
 
   if (firebaseConfigured && !user) {
     return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  return children;
+}
+
+function RequireAdmin({ children }) {
+  const { firebaseConfigured, ready, user } = useAuth();
+  const location = useLocation();
+
+  if (!ready) {
+    return (
+      <div className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-[#070708] dark:text-white flex items-center justify-center text-sm text-zinc-500 dark:text-white/50">
+        Loading…
+      </div>
+    );
+  }
+
+  if (!firebaseConfigured || !user) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+
+  if (!isAdminEmail(user.email)) {
+    return <Navigate to="/" replace />;
   }
 
   return children;
@@ -60,6 +85,14 @@ export default function App() {
         <Route path="/status" element={<StatusPage />} />
         <Route path="/changelog" element={<ChangelogPage />} />
         <Route path="/cookies" element={<CookiesPage />} />
+        <Route
+          path="/admin"
+          element={
+            <RequireAdmin>
+              <AdminPage />
+            </RequireAdmin>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <CookieConsent />

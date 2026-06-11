@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { Activity, AlertTriangle, ArrowLeft, Clock, Cpu, Globe, RefreshCw, Server } from 'lucide-react';
+
+const StatusWorldMap = React.lazy(() => import('./StatusWorldMap'));
 
 const API = (() => {
   const origin = (import.meta.env.VITE_PUBLIC_API_ORIGIN || '').trim().replace(/\/$/, '');
@@ -331,7 +333,7 @@ function StatusHistoryTrack({ historyMap }) {
   return (
     <>
       <div className="w-full pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))]">
-        <div className="flex w-full justify-center overflow-x-auto no-scrollbar py-0.5">
+        <div className="flex w-full justify-start overflow-x-auto no-scrollbar py-0.5">
           <div className="w-max shrink-0 rounded-2xl border border-zinc-200/85 bg-white/85 px-3 py-2.5 shadow-sm backdrop-blur-sm dark:border-white/[0.1] dark:bg-white/[0.06] dark:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.45)]">
             <div
               className="flex h-12 items-stretch gap-1 sm:gap-1.5"
@@ -380,7 +382,7 @@ function StatusHistoryTrack({ historyMap }) {
 
 function StatusSnapshotLegend() {
   return (
-    <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[10px] text-zinc-500 dark:text-white/35">
+    <div className="mt-3 flex flex-wrap items-center justify-start gap-x-4 gap-y-1.5 text-[10px] text-zinc-500 dark:text-white/35">
       <span className="inline-flex items-center gap-1.5">
         <span className="h-2 w-2 rounded-full bg-emerald-500/85 dark:bg-emerald-500/70" aria-hidden />
         Operational
@@ -549,8 +551,9 @@ export default function StatusPage() {
     <div className="min-h-screen overflow-x-hidden bg-zinc-100 text-zinc-900 dark:bg-[#070708] dark:text-white font-sans selection:bg-zinc-300/40 dark:selection:bg-white/20">
       <div className="pointer-events-none fixed inset-0 opacity-20 dark:opacity-[0.35] bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(120,119,198,0.2),transparent)]" />
 
-      <div className="relative z-10 flex min-h-screen flex-col">
-        <div className="mx-auto w-full min-w-0 max-w-lg shrink-0 px-4 pt-[max(1rem,env(safe-area-inset-top))] sm:px-6">
+      <div className="relative z-10 flex min-h-screen flex-col lg:flex-row">
+        <div className="flex min-w-0 shrink-0 flex-col lg:max-w-2xl">
+        <div className="w-full min-w-0 max-w-lg shrink-0 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[max(1rem,env(safe-area-inset-top))] sm:pl-6 sm:pr-6">
           <header className="mb-8 flex items-center justify-between gap-3">
             <Link
               to="/"
@@ -591,14 +594,14 @@ export default function StatusPage() {
           </div>
         </div>
 
-        <div className="relative z-10 mt-2 w-full shrink-0 pb-1">
+        <div className="relative z-10 mt-2 min-w-0 w-full shrink-0 overflow-x-auto pb-1">
           <StatusHistoryTrack historyMap={historyMap} />
         </div>
 
-        <div className="mx-auto flex w-full min-w-0 max-w-lg flex-1 flex-col px-4 pb-12 sm:px-6">
+        <div className="flex w-full min-w-0 max-w-lg flex-1 flex-col pb-12 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] sm:pl-6 sm:pr-6">
           <StatusSnapshotLegend />
 
-          <div className="mt-6 flex flex-col gap-3">
+          <div className="mt-6 flex w-full flex-col gap-3">
             <StatusRow
               icon={Globe}
               title="Web app"
@@ -630,13 +633,26 @@ export default function StatusPage() {
             />
           </div>
 
-          <footer className="mt-auto pt-10 text-center text-[10px] text-zinc-400 dark:text-white/25">
+          <footer className="mt-auto pt-10 text-left text-[10px] text-zinc-400 dark:text-white/25">
             <span className="inline-flex items-center gap-1.5">
               <Activity className="h-3 w-3" aria-hidden />
               Modulon status · not a formal SLA page
             </span>
           </footer>
         </div>
+        </div>
+
+        <aside className="relative hidden min-h-[min(100vh,720px)] w-full min-w-0 flex-1 border-t border-zinc-200/80 dark:border-white/[0.06] lg:sticky lg:top-0 lg:ml-10 lg:flex lg:h-screen lg:min-h-0 lg:min-w-[min(55vw,640px)] lg:border-l lg:border-t-0 xl:ml-14 xl:min-w-[min(60vw,720px)]">
+          <Suspense
+            fallback={
+              <div className="flex h-full w-full items-center justify-center text-xs text-zinc-500 dark:text-white/40">
+                Loading map…
+              </div>
+            }
+          >
+            <StatusWorldMap className="h-full w-full" />
+          </Suspense>
+        </aside>
       </div>
     </div>
   );

@@ -182,6 +182,350 @@
   .dark .model-picker-item--idle:hover {
     background-color: rgb(255 255 255 / 0.05);
   }
+
+  /* Admin table — native selects need solid colors on Windows/Electron. */
+  .admin-cell-select {
+    width: 100%;
+    min-width: 7.5rem;
+    border-radius: 0.375rem;
+    border: 1px solid rgb(228 228 231 / 0.9);
+    background-color: #fff;
+    padding: 0.375rem 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    color: #18181b;
+    outline: none;
+    color-scheme: light;
+  }
+
+  .admin-cell-select:focus {
+    border-color: rgb(161 161 170);
+  }
+
+  .admin-cell-select option {
+    background-color: #fff;
+    color: #18181b;
+  }
+
+  .dark .admin-cell-select {
+    border-color: rgb(255 255 255 / 0.12);
+    background-color: #27272a;
+    color: #fafafa;
+    color-scheme: dark;
+  }
+
+  .dark .admin-cell-select:focus {
+    border-color: rgb(255 255 255 / 0.25);
+  }
+
+  .dark .admin-cell-select option {
+    background-color: #27272a;
+    color: #fafafa;
+  }
+
+  .admin-cell-select--operational {
+    border-color: rgb(16 185 129 / 0.35);
+    background-color: rgb(16 185 129 / 0.08);
+  }
+
+  .dark .admin-cell-select--operational {
+    border-color: rgb(52 211 153 / 0.35);
+    background-color: rgb(16 185 129 / 0.12);
+  }
+
+  .admin-cell-select--slow {
+    border-color: rgb(245 158 11 / 0.35);
+    background-color: rgb(245 158 11 / 0.08);
+  }
+
+  .dark .admin-cell-select--slow {
+    border-color: rgb(251 191 36 / 0.35);
+    background-color: rgb(245 158 11 / 0.12);
+  }
+
+  .admin-cell-select--building {
+    border-color: rgb(59 130 246 / 0.35);
+    background-color: rgb(59 130 246 / 0.08);
+  }
+
+  .dark .admin-cell-select--building {
+    border-color: rgb(96 165 250 / 0.35);
+    background-color: rgb(59 130 246 / 0.12);
+  }
+
+  .admin-cell-select--down {
+    border-color: rgb(239 68 68 / 0.35);
+    background-color: rgb(239 68 68 / 0.08);
+  }
+
+  .dark .admin-cell-select--down {
+    border-color: rgb(248 113 113 / 0.35);
+    background-color: rgb(239 68 68 / 0.12);
+  }
+
+  .admin-cell-input {
+    width: 100%;
+    border-radius: 9999px;
+    border: 1px solid rgb(228 228 231 / 0.9);
+    background-color: #fff;
+    padding: 0.375rem 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    color: #18181b;
+    outline: none;
+    color-scheme: light;
+  }
+
+  .admin-cell-input:focus {
+    border-color: rgb(161 161 170);
+  }
+
+  .admin-cell-input--mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+      monospace;
+    font-size: 0.625rem;
+  }
+
+  .dark .admin-cell-input {
+    border-color: rgb(255 255 255 / 0.12);
+    background-color: #27272a;
+    color: #fafafa;
+    color-scheme: dark;
+  }
+
+  .dark .admin-cell-input:focus {
+    border-color: rgb(255 255 255 / 0.25);
+  }
+
+  .admin-dropdown-trigger {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.375rem;
+    border-radius: 9999px;
+    border: 1px solid rgb(228 228 231 / 0.9);
+    background-color: #fff;
+    padding: 0.375rem 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    color: #18181b;
+    outline: none;
+    transition: border-color 150ms, background-color 150ms;
+  }
+
+  .admin-dropdown-trigger:hover {
+    border-color: rgb(161 161 170);
+  }
+
+  .admin-dropdown-trigger:focus-visible {
+    border-color: rgb(113 113 122);
+    box-shadow: 0 0 0 2px rgb(113 113 122 / 0.2);
+  }
+
+  .dark .admin-dropdown-trigger {
+    border-color: rgb(255 255 255 / 0.12);
+    background-color: #27272a;
+    color: #fafafa;
+  }
+
+  .dark .admin-dropdown-trigger:hover {
+    border-color: rgb(255 255 255 / 0.22);
+  }
+
+  .dark .admin-dropdown-trigger:focus-visible {
+    border-color: rgb(255 255 255 / 0.3);
+    box-shadow: 0 0 0 2px rgb(255 255 255 / 0.12);
+  }
+
+  .admin-dropdown-trigger--operational {
+    border-color: rgb(16 185 129 / 0.35);
+    background-color: rgb(16 185 129 / 0.08);
+  }
+
+  .dark .admin-dropdown-trigger--operational {
+    border-color: rgb(52 211 153 / 0.35);
+    background-color: rgb(16 185 129 / 0.12);
+  }
+
+  .admin-dropdown-trigger--slow {
+    border-color: rgb(245 158 11 / 0.35);
+    background-color: rgb(245 158 11 / 0.08);
+  }
+
+  .dark .admin-dropdown-trigger--slow {
+    border-color: rgb(251 191 36 / 0.35);
+    background-color: rgb(245 158 11 / 0.12);
+  }
+
+  .admin-dropdown-trigger--maintenance {
+    border-color: rgb(139 92 246 / 0.35);
+    background-color: rgb(139 92 246 / 0.08);
+  }
+
+  .dark .admin-dropdown-trigger--maintenance {
+    border-color: rgb(167 139 250 / 0.35);
+    background-color: rgb(139 92 246 / 0.12);
+  }
+
+  .admin-dropdown-trigger--building {
+    border-color: rgb(59 130 246 / 0.35);
+    background-color: rgb(59 130 246 / 0.08);
+  }
+
+  .dark .admin-dropdown-trigger--building {
+    border-color: rgb(96 165 250 / 0.35);
+    background-color: rgb(59 130 246 / 0.12);
+  }
+
+  .admin-dropdown-trigger--down {
+    border-color: rgb(239 68 68 / 0.35);
+    background-color: rgb(239 68 68 / 0.08);
+  }
+
+  .dark .admin-dropdown-trigger--down {
+    border-color: rgb(248 113 113 / 0.35);
+    background-color: rgb(239 68 68 / 0.12);
+  }
+
+  .admin-dropdown-trigger--combo {
+    padding: 0.125rem 0.125rem 0.125rem 0.625rem;
+  }
+
+  .admin-dropdown-combo-input {
+    min-width: 0;
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 0.25rem 0;
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    color: inherit;
+    outline: none;
+  }
+
+  .admin-dropdown-combo-input::placeholder {
+    color: rgb(161 161 170);
+  }
+
+  .dark .admin-dropdown-combo-input::placeholder {
+    color: rgb(255 255 255 / 0.35);
+  }
+
+  .admin-dropdown-chevron-btn {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 9999px;
+    background: transparent;
+    padding: 0.3125rem;
+    color: inherit;
+    cursor: pointer;
+    transition: background-color 120ms;
+  }
+
+  .admin-dropdown-chevron-btn:hover {
+    background-color: rgb(24 24 27 / 0.06);
+  }
+
+  .dark .admin-dropdown-chevron-btn:hover {
+    background-color: rgb(255 255 255 / 0.08);
+  }
+
+  .admin-dropdown-panel {
+    margin: 0;
+    list-style: none;
+    border-radius: 1.75rem;
+    border: 1px solid rgb(228 228 231 / 0.95);
+    background-color: #fff;
+    padding: 0.5rem;
+    box-shadow:
+      0 10px 24px rgb(24 24 27 / 0.12),
+      0 2px 6px rgb(24 24 27 / 0.06);
+  }
+
+  .dark .admin-dropdown-panel {
+    border-color: rgb(255 255 255 / 0.12);
+    background-color: #1c1c1f;
+    box-shadow: 0 16px 40px rgb(0 0 0 / 0.45);
+  }
+
+  .admin-dropdown-option-wrap {
+    padding: 0.1875rem 0.3125rem;
+  }
+
+  .admin-dropdown-option {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    padding: 0.4375rem 0.75rem;
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    color: #27272a;
+    text-align: left;
+    transition: background-color 120ms;
+  }
+
+  .admin-dropdown-option:hover {
+    background-color: rgb(244 244 245);
+  }
+
+  .admin-dropdown-option--selected {
+    background-color: rgb(244 244 245);
+    font-weight: 500;
+  }
+
+  .dark .admin-dropdown-option {
+    color: rgb(255 255 255 / 0.88);
+  }
+
+  .dark .admin-dropdown-option:hover,
+  .dark .admin-dropdown-option--selected {
+    background-color: rgb(255 255 255 / 0.08);
+  }
+
+  .admin-dropdown-option--operational {
+    color: rgb(4 120 87);
+  }
+
+  .dark .admin-dropdown-option--operational {
+    color: rgb(110 231 183);
+  }
+
+  .admin-dropdown-option--slow {
+    color: rgb(180 83 9);
+  }
+
+  .dark .admin-dropdown-option--slow {
+    color: rgb(252 211 77);
+  }
+
+  .admin-dropdown-option--maintenance {
+    color: rgb(109 40 217);
+  }
+
+  .dark .admin-dropdown-option--maintenance {
+    color: rgb(196 181 253);
+  }
+
+  .admin-dropdown-option--building {
+    color: rgb(29 78 216);
+  }
+
+  .dark .admin-dropdown-option--building {
+    color: rgb(147 197 253);
+  }
+
+  .admin-dropdown-option--down {
+    color: rgb(185 28 28);
+  }
+
+  .dark .admin-dropdown-option--down {
+    color: rgb(252 165 165);
+  }
 }
 
 /* Chat density — comfortable (default) vs compact. */
