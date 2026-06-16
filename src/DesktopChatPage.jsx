@@ -2,7 +2,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   BarChart3,
-  Check,
   ChevronDown,
   ClipboardCopy,
   Copy,
@@ -30,7 +29,6 @@ import { providerReplyPrompt } from './languages';
 import ChatMessageContent from './ChatMessageContent';
 import { MessageTokenCounter } from './MessageTokenCounter';
 import { formatSidebarChatTitle, isSidebarTitleTruncated } from './chatTitle';
-import { useGenieMenu } from './useGenieMenu';
 import PersonalizationSettings from './PersonalizationSettings';
 import ChatMemoryToggle from './ChatMemoryToggle';
 import ThinkModeToggle from './ThinkModeToggle';
@@ -39,43 +37,16 @@ import { readThinkMode, writeThinkMode } from './modulonThinkMode';
 import { getClientDateTimePayload } from './clientDateTime';
 import { parseThinkResponse, THINK_MODE_SYSTEM_HINT } from './parseThinkResponse';
 import { readPersonalization, readPersonalizationStored } from './modulonPersonalization';
-import { modelPickerItemClass } from './modelPickerMenu';
 import AppearanceSettings from './AppearanceSettings';
 import { translatedHomeGreeting } from './i18n/homeGreeting';
 import modulonIcon from './assets/icons/Modulon_Icon.png';
+import ModelPickerDropdown from './ModelPickerDropdown';
+import { MODULON_CHAT_MODEL_LABEL } from './modelCatalog';
 
 const API = (() => {
   const origin = (import.meta.env.VITE_PUBLIC_API_ORIGIN || '').trim().replace(/\/$/, '');
   return origin ? `${origin}/api` : '/api';
 })();
-
-const MODULON_CHAT_MODEL_LABEL = 'Modulon M0.1';
-const MODULON_MODEL_MENU_SOON  = 'More soon…';
-
-const PROVIDER_MODELS={
-  anthropic:{label:'Anthropic',models:[
-    {id:'claude-opus-4-5',   label:'Claude Opus 4.5'  },
-    {id:'claude-sonnet-4-5', label:'Claude Sonnet 4.5'},
-    {id:'claude-haiku-4-5',  label:'Claude Haiku 4.5' },
-  ]},
-  openai:{label:'OpenAI',models:[
-    {id:'gpt-4o',      label:'GPT-4o'     },
-    {id:'gpt-4o-mini', label:'GPT-4o mini'},
-    {id:'o3-mini',     label:'o3-mini'    },
-  ]},
-  google:{label:'Google',models:[
-    {id:'gemini-2.0-flash', label:'Gemini 2.0 Flash'},
-    {id:'gemini-1.5-pro',   label:'Gemini 1.5 Pro'  },
-  ]},
-  xai:{label:'xAI',models:[
-    {id:'grok-3',      label:'Grok 3'     },
-    {id:'grok-3-mini', label:'Grok 3 mini'},
-  ]},
-  deepseek:{label:'DeepSeek',models:[
-    {id:'deepseek-chat',     label:'DeepSeek V3'},
-    {id:'deepseek-reasoner', label:'DeepSeek R1'},
-  ]},
-};
 
 const DAILY_USAGE_KEY          = 'modulon-daily-usage';
 const WEEKLY_USAGE_KEY         = 'modulon-weekly-usage';
@@ -280,21 +251,6 @@ export default function DesktopChatPage() {
   const [attachMenuOpen,   setAttachMenuOpen]   = useState(false);
   const [attachMenuPos,    setAttachMenuPos]    = useState(null);
   const [modelMenuOpen,    setModelMenuOpen]    = useState(false);
-  const [modelMenuPos,     setModelMenuPos]     = useState(null);
-  const modelSelectMenuRef = useRef(null);
-  const {
-    menuMounted: modelMenuMounted,
-    menuClass: modelMenuAnimClass,
-    panelRef: modelMenuPanelRef,
-  } = useGenieMenu(modelMenuOpen);
-
-  const onModelMenuRef = useCallback(
-    (node) => {
-      modelSelectMenuRef.current = node;
-      modelMenuPanelRef(node);
-    },
-    [modelMenuPanelRef],
-  );
 
   const [contextMenu,      setContextMenu]      = useState(null);
   const [dailyUsage,       setDailyUsage]       = useState(() => readDailyUsage());
@@ -480,36 +436,6 @@ export default function DesktopChatPage() {
     window.addEventListener('keydown',h);
     return()=>window.removeEventListener('keydown',h);
   }, [attachMenuOpen]);
-
-  useLayoutEffect(()=>{
-    if(!modelMenuMounted){setModelMenuPos(null);return;}
-    const update=()=>{
-      const btn=modelPickerBtnRef.current; if(!btn)return;
-      const r=btn.getBoundingClientRect();
-      const menuWidth=208;
-      let left=r.right-menuWidth;
-      if(left<8)left=8;
-      if(left+menuWidth>window.innerWidth-8)left=window.innerWidth-menuWidth-8;
-      setModelMenuPos({left,bottom:window.innerHeight-r.top+8});
-    };
-    update();
-    window.addEventListener('resize',update);
-    return()=>window.removeEventListener('resize',update);
-  }, [modelMenuMounted]);
-
-  useEffect(()=>{
-    if(!modelMenuOpen)return;
-    const h=(e)=>{if(modelPickerBtnRef.current?.contains(e.target)||modelSelectMenuRef.current?.contains(e.target))return;setModelMenuOpen(false);};
-    document.addEventListener('pointerdown',h,true);
-    return()=>document.removeEventListener('pointerdown',h,true);
-  }, [modelMenuOpen]);
-
-  useEffect(()=>{
-    if(!modelMenuOpen)return;
-    const h=(e)=>{if(e.key==='Escape')setModelMenuOpen(false);};
-    window.addEventListener('keydown',h);
-    return()=>window.removeEventListener('keydown',h);
-  }, [modelMenuOpen]);
 
   useEffect(()=>{
     const h=(e)=>{
@@ -930,37 +856,14 @@ export default function DesktopChatPage() {
                 <span className="min-w-0 truncate">{selectedModel.label}</span>
                 <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden strokeWidth={2} />
               </button>
-              {modelMenuMounted&&modelMenuPos&&(
-                <div ref={onModelMenuRef} role="menu" aria-label="Models"
-                  className={`fixed z-[80] w-56 overflow-hidden rounded-3xl border border-zinc-200/90 bg-white py-1.5 text-sm shadow-xl dark:border-white/[0.12] dark:bg-[#121214] ${modelMenuAnimClass}`}
-                  style={{left:modelMenuPos.left,bottom:modelMenuPos.bottom}}>
-                  <div className="model-picker-menu__list max-h-72 overflow-y-auto no-scrollbar">
-                    <button type="button" role="menuitem"
-                      onClick={()=>{setSelectedModel({id:'modulon',label:MODULON_CHAT_MODEL_LABEL,provider:'modulon'});setModelMenuOpen(false);}}
-                      className={modelPickerItemClass(selectedModel.id==='modulon')}>
-                      <span className="min-w-0 flex-1 truncate">{MODULON_CHAT_MODEL_LABEL}</span>
-                      {selectedModel.id==='modulon'&&<Check className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden/>}
-                    </button>
-                    {Object.entries(PROVIDER_MODELS).filter(([pid])=>apiKeys[pid]).map(([pid,group])=>(
-                      <React.Fragment key={pid}>
-                        <div className="mx-3 my-1 border-t border-zinc-100 dark:border-white/[0.06]"/>
-                        <p className="px-3 pb-1 pt-1.5 text-[10px] font-medium uppercase tracking-widest text-zinc-400 dark:text-white/30">{group.label}</p>
-                        {group.models.map(m=>(
-                          <button key={m.id} type="button" role="menuitem"
-                            onClick={()=>{setSelectedModel({id:m.id,label:m.label,provider:pid});setModelMenuOpen(false);}}
-                            className={modelPickerItemClass(selectedModel.id===m.id)}>
-                            <span className="min-w-0 flex-1 truncate">{m.label}</span>
-                            {selectedModel.id===m.id&&<Check className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden/>}
-                          </button>
-                        ))}
-                      </React.Fragment>
-                    ))}
-                    {!Object.keys(PROVIDER_MODELS).some(pid=>apiKeys[pid])&&(
-                      <p className="px-3 py-2 text-center text-xs italic text-zinc-400 dark:text-white/30">Add API keys in Settings → API Keys</p>
-                    )}
-                  </div>
-                </div>
-              )}
+              <ModelPickerDropdown
+                open={modelMenuOpen}
+                onOpenChange={setModelMenuOpen}
+                anchorRef={modelPickerBtnRef}
+                selectedModel={selectedModel}
+                onSelectModel={setSelectedModel}
+                apiKeys={apiKeys}
+              />
               <button
                 type="submit"
                 disabled={sending||!input.trim()||apiOk===false}
