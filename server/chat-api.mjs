@@ -500,6 +500,14 @@ function parseThinkResponse(text) {
 /** Phi-3 and small models sometimes echo the user, leak tokens, or run on with junk. */
 const MODULON_REPLY_STOP_MARKERS = [
   /\n---+\s*\n/i,
+  /#{1,3}\s*Your task\b/i,
+  /#{1,3}\s*Instructions?\b/i,
+  /\bYour task:\s*(?:Expound|Write|Describe|Explain|Include|Provide)\b/i,
+  /\bExpound upon Modulon\b/i,
+  /\buser testimonial quotes?\b/i,
+  /\bunique selling proposition\b/i,
+  /\bconventional language processing AIs?\b/i,
+  /\bGPT models\b/i,
   /\nGiven document:/i,
   /\nDocument Content Summary/i,
   /\nAnalyze the given document/i,
@@ -515,8 +523,11 @@ const OLLAMA_STOP_SEQUENCES = [
   '<|user|>',
   '<|system|>',
   '\n---\n',
+  '## Your task',
+  'Your task:',
   'Given document:',
   'Document Content Summary',
+  'Expound upon Modulon',
 ];
 
 const SIMPLE_GREETING_RE = new RegExp(
@@ -531,17 +542,27 @@ const SIMPLE_GREETING_RE = new RegExp(
 );
 
 const IDENTITY_LEAK_RE =
-  /\b(as an? |i'?m an? )?(ai|artificial intelligence|language model|large language model|chatbot|virtual assistant)\b|\b(developed|created|made) by (microsoft|openai|google|anthropic|meta)\b|\bmicrosoft'?s?\b.*\b(ai|copilot|assistant)\b|\b(copilot|chatgpt|gemini|claude|phi-?3)\b|\bmy purpose is to (assist|help)\b/i;
+  /\b(as an? |i'?m an? )?(ai|artificial intelligence|language model|large language model|chatbot|virtual assistant)\b|\b(developed|created|made) by (microsoft|openai|google|anthropic|meta)\b|\bmicrosoft'?s?\b.*\b(ai|copilot|assistant)\b|\b(copilot|chatgpt|gemini|claude|phi-?3)\b|\bmy purpose is to (assist|help)\b|\bdedicated assistant for\b|\bdesigned to enhance user experience\b|\bwithout any hidden agendas\b|\buser-centric design philosophy\b|\bpersonalized interactions without resorting\b/i;
+
+const PROMPT_LEAK_RE =
+  /\b(your task:|expound upon|user testimonial|unique selling proposition|must begin with a casual greeting|incorporate at least \d+|selling proposition that sets it apart)\b/i;
+
+/** Third-person / marketing phrasing small models echo from the system prompt. */
+const CORPORATE_SPEAK_RE =
+  /\bfor (?:the )?Modulon(?:\s+app)?\b|\bthe Modulon app\b|\bbuilt-in assistant for\b|\bdedicated assistant for Modulon\b|\bas Modulon,?\s+the\b|\bModulon(?:'s)?\s+(?:primary|core)\s+function\b/i;
 
 const TIME_QUESTION_RE =
   /\b(what(?:'s| is) the (time|date|day)|what (time|day) is it|current (time|date)|today(?:'s)? date|tell me the time|know what time)\b/i;
 
+const IDENTITY_QUESTION_RE =
+  /\b(who are you|what are you|what(?:'s| is) your name|tell me about yourself)\b/i;
+
 const GREETING_REPLIES = {
   en: {
-    morning: ['Good morning! How can I help you today?', "Morning! What's on your mind?"],
-    afternoon: ['Good afternoon! What can I help you with?', "Afternoon! How's it going?"],
-    evening: ['Good evening! How can I help?', "Evening! What's on your mind?"],
-    default: ["Hey! I'm doing well — what can I help you with?", 'Hi there! How can I help today?'],
+    morning: ["Good morning! I'm Modulon — how can I help?", "Morning! I'm Modulon. What's on your mind?"],
+    afternoon: ["Good afternoon! I'm Modulon — what can I help with?", "Hey, I'm Modulon. How's it going?"],
+    evening: ["Good evening! I'm Modulon — how can I help?", "Evening! I'm Modulon. What do you need?"],
+    default: ["Hey! I'm Modulon — what can I help you with?", "Hi! I'm Modulon. What's on your mind?"],
   },
   de: {
     morning: ['Guten Morgen! Wie kann ich dir helfen?', 'Morgen! Was kann ich für dich tun?'],
@@ -664,6 +685,9 @@ function applyFactualOverrides(message, langCode, timeZone, clientTime, reply, t
   if (isSimpleGreeting(message)) {
     return { reply: modulonGreetingReply(langCode, timeZone, clientTime), thinking: '' };
   }
+  if (isIdentityQuestion(message)) {
+    return { reply: modulonIdentityReply(langCode), thinking: '' };
+  }
   return { reply, thinking };
 }
 
@@ -688,6 +712,26 @@ function isSimpleGreeting(message) {
   return SIMPLE_GREETING_RE.test(t);
 }
 
+function isIdentityQuestion(message) {
+  const t = String(message || '').trim();
+  if (!t || t.length > 80) return false;
+  return IDENTITY_QUESTION_RE.test(t);
+}
+
+function modulonIdentityReply(langCode = 'en') {
+  const base = modulonLangBase(langCode);
+  const replies = {
+    en: "I'm Modulon — your assistant in this chat. What can I help with?",
+    de: 'Ich bin Modulon — dein Assistent in diesem Chat. Wobei kann ich helfen?',
+    es: 'Soy Modulon — tu asistente en este chat. ¿En qué puedo ayudarte?',
+    fr: 'Je suis Modulon — ton assistant dans ce chat. Comment puis-je t’aider ?',
+    pt: 'Sou o Modulon — seu assistente neste chat. Em que posso ajudar?',
+    zh: '我是 Modulon，这个聊天里的助手。需要我帮什么？',
+    ja: '私は Modulon です。このチャットの助手です。何をお手伝いしましょうか？',
+  };
+  return replies[base] || replies.en;
+}
+
 function modulonGreetingReply(langCode = 'en', timeZone, clientTime) {
   const base = modulonLangBase(langCode);
   const hour = getHourInTimeZone(clientTime, timeZone);
@@ -701,13 +745,37 @@ function containsIdentityLeak(text) {
   return IDENTITY_LEAK_RE.test(String(text || ''));
 }
 
+function containsPromptLeak(text) {
+  return PROMPT_LEAK_RE.test(String(text || ''));
+}
+
+function containsCorporateSpeak(text) {
+  return CORPORATE_SPEAK_RE.test(String(text || ''));
+}
+
+function softenCorporateSpeak(text) {
+  return String(text || '')
+    .replace(/\bfor (?:the )?Modulon(?:\s+app)?\b/gi, '')
+    .replace(/\bthe Modulon app\b/gi, 'Modulon')
+    .replace(/\bbuilt-in assistant for Modulon\b/gi, 'Modulon')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,.!?])/g, '$1')
+    .trim();
+}
+
 function rewriteIdentityLeaks(text, userMessage, langCode = 'en') {
-  if (!containsIdentityLeak(text)) return text;
+  if (!containsIdentityLeak(text) && !containsPromptLeak(text) && !containsCorporateSpeak(text)) {
+    return text;
+  }
   if (isSimpleGreeting(userMessage)) return modulonGreetingReply(langCode, null, null);
   const sentences = String(text).split(/(?<=[.!?])\s+/);
-  const cleaned = sentences.filter((s) => !containsIdentityLeak(s)).join(' ').trim();
+  const cleaned = softenCorporateSpeak(
+    sentences
+      .filter((s) => !containsIdentityLeak(s) && !containsPromptLeak(s) && !containsCorporateSpeak(s))
+      .join(' '),
+  );
   if (cleaned) return cleaned;
-  return "I'm here to help — what would you like to talk about?";
+  return "I'm Modulon — what would you like to talk about?";
 }
 
 function sanitizeModulonReply(raw, userMessage = '', langCode = 'en') {
@@ -726,6 +794,7 @@ function sanitizeModulonReply(raw, userMessage = '', langCode = 'en') {
   }
 
   text = text.replace(/\n{3,}/g, '\n\n').trim();
+  text = softenCorporateSpeak(text);
   return rewriteIdentityLeaks(text, userMessage, langCode);
 }
 
@@ -733,17 +802,20 @@ function modulonSystemPrompt(langCode = 'en', personalization = '', thinkMode = 
   if (process.env.MODULON_SYSTEM_PROMPT) return process.env.MODULON_SYSTEM_PROMPT;
   const label = modulonLangLabel(langCode);
   let base =
-    `You are Modulon, the built-in assistant for the Modulon app.\n` +
+    `You are Modulon — the assistant in this chat.\n` +
     `${modulonDateTimeBlock(timeZone, clientTime)}\n` +
     `CRITICAL: The user's app language is ${label}. Every reply MUST be written entirely in ${label}.\n` +
     `Do NOT reply in Chinese, Russian, Japanese, or any other language unless the user's latest message is clearly written in that language.\n` +
-    `Never say you are an AI, artificial intelligence, language model, or bot. Speak naturally as Modulon.\n` +
+    `Speak in first person as Modulon (e.g. "I'm Modulon" or "Hey — I'm Modulon"). Never say "for Modulon", "the Modulon app", or "the Modulon assistant".\n` +
+    `Sound like a helpful person in chat — short, natural, friendly. No marketing copy or corporate language.\n` +
+    `Never say you are an AI, artificial intelligence, language model, or bot.\n` +
     `You are NOT Microsoft Copilot, NOT Phi, NOT ChatGPT, and NOT made by Microsoft or any other company.\n` +
-    `Never say you were developed by Microsoft, OpenAI, Google, or anyone else. You are Modulon only.\n` +
+    `Never say you were developed by Microsoft, OpenAI, Google, or anyone else.\n` +
     `Do not mention OpenAI, Anthropic, Ollama, Phi, Microsoft, or other AI brands.\n` +
     `Reply only to the user's latest message. Never repeat their message back.\n` +
     `For greetings and small talk, answer in one or two short, friendly sentences.\n` +
-    `Never invent assignments, essays, tables, document analyses, or follow-up tasks. Stop when your answer is complete.`;
+    `Never invent assignments, essays, tables, document analyses, or follow-up tasks. Stop when your answer is complete.\n` +
+    `Never output task prompts, "## Your task" headers, or instructions — only the direct reply.`;
   if (thinkMode) {
     base += `\n\n${THINK_MODE_SYSTEM_HINT}`;
   }
@@ -761,7 +833,7 @@ function modulonOllamaUserTurn(message, langCode = 'en') {
   const label = modulonLangLabel(langCode);
   return (
     `${message}\n\n` +
-    `(Reply as Modulon only — not Microsoft, not an AI. Write your entire reply in ${label} only.)`
+    `(Reply in ${label}, first person as Modulon — natural and brief, not corporate.)`
   );
 }
 
@@ -834,7 +906,7 @@ async function chatOllama({ message, model, history = [], systemPrompt, baseUrl,
 
 /** Modulon M0.1 — uses local Ollama by default; falls back to the GPT-2 bridge. */
 async function askModulon(message, history = [], langCode = 'en', personalization = '', thinkMode = false, timeZone, clientTime) {
-  if (isTimeQuestion(message) || isSimpleGreeting(message)) {
+  if (isTimeQuestion(message) || isSimpleGreeting(message) || isIdentityQuestion(message)) {
     const { reply, thinking } = applyFactualOverrides(message, langCode, timeZone, clientTime, '', '');
     return { reply, thinking, proto: false, inputTokens: 0, outputTokens: 0 };
   }
