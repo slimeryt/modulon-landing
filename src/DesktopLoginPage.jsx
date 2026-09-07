@@ -17,8 +17,8 @@ async function handoffToDesktop(googleIdToken) {
   const code = new URLSearchParams(window.location.search).get('code') || '';
   const payload = JSON.stringify({ googleIdToken, code });
   const endpoints = [
-    '/api/desktop-auth/start',
     'https://ownchatbot-proxy.slimer0935.workers.dev/desktop-auth/start',
+    '/api/desktop-auth/start',
   ];
   let nextCode = code;
   let ok = false;
