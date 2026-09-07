@@ -340,6 +340,42 @@ app.post('/api/auth/send-reset-email', async (req, res) => {
   }
 });
 
+const DESKTOP_AUTH_TTL_MS = 2 * 60 * 1000;
+/** @type {Map<string, { googleIdToken: string, expiresAt: number }>} */
+const desktopAuthCodes = new Map();
+
+function purgeDesktopAuthCodes() {
+  const now = Date.now();
+  for (const [code, entry] of desktopAuthCodes) {
+    if (entry.expiresAt <= now) desktopAuthCodes.delete(code);
+  }
+}
+
+function normalizeDesktopCode(value) {
+  const code = String(value || '').trim();
+  return /^[a-zA-Z0-9]{8,32}$/.test(code) ? code : '';
+}
+
+app.post('/api/desktop-auth/start', (req, res) => {
+  const googleIdToken = String(req.body?.googleIdToken || '').trim();
+  if (!googleIdToken) return res.status(400).json({ error: 'googleIdToken required' });
+  purgeDesktopAuthCodes();
+  const code = normalizeDesktopCode(req.body?.code) || crypto.randomUUID().replace(/-/g, '').slice(0, 16);
+  desktopAuthCodes.set(code, { googleIdToken, expiresAt: Date.now() + DESKTOP_AUTH_TTL_MS });
+  return res.json({ code, expiresIn: DESKTOP_AUTH_TTL_MS / 1000 });
+});
+
+app.get('/api/desktop-auth/claim', (req, res) => {
+  const code = normalizeDesktopCode(req.query.code);
+  if (!code) return res.status(400).json({ error: 'code required' });
+  const entry = desktopAuthCodes.get(code);
+  if (!entry || entry.expiresAt <= Date.now()) {
+    return res.status(404).json({ error: 'pending' });
+  }
+  desktopAuthCodes.delete(code);
+  return res.json({ googleIdToken: entry.googleIdToken });
+});
+
 app.get('/api/health', async (_req, res) => {
   let ollamaReady = null;
   if (MODULON_BACKEND === 'ollama' || MODULON_BACKEND === 'ollama-first') {

@@ -13,6 +13,34 @@ import { getFirebaseAuth, isFirebaseConfigured } from './firebase';
 import { mapAuthError } from './AuthContext';
 import modulonIcon from './assets/icons/Modulon_Icon.png';
 
+async function handoffToDesktop(googleIdToken) {
+  const code = new URLSearchParams(window.location.search).get('code') || '';
+  const payload = JSON.stringify({ googleIdToken, code });
+  const endpoints = [
+    '/api/desktop-auth/start',
+    'https://ownchatbot-proxy.slimer0935.workers.dev/desktop-auth/start',
+  ];
+  let nextCode = code;
+  let ok = false;
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+      });
+      if (!response.ok) continue;
+      const data = await response.json();
+      nextCode = data.code || nextCode;
+      ok = true;
+    } catch {
+      /* try the next receiver */
+    }
+  }
+  if (!ok) throw new Error('Could not hand off this sign-in to Modulon Desktop.');
+  window.location.href = `modulon://auth?code=${encodeURIComponent(nextCode)}`;
+}
+
 // Google "G" logo SVG
 function GoogleLogo({ className = 'h-5 w-5' }) {
   return (
@@ -65,10 +93,7 @@ export default function DesktopLoginPage() {
       const credential = GoogleAuthProvider.credentialFromResult(result);
       const googleIdToken = credential?.idToken;
       if (!googleIdToken) throw new Error('Could not obtain Google ID token.');
-
-      // Hand the token back to Electron via the custom protocol deep-link.
-      const params = new URLSearchParams({ googleIdToken });
-      window.location.href = `modulon://auth?${params.toString()}`;
+      await handoffToDesktop(googleIdToken);
       setDone(true);
     } catch (err) {
       setError(mapAuthError(err));
@@ -95,9 +120,7 @@ export default function DesktopLoginPage() {
       const credential = GoogleAuthProvider.credentialFromResult(result);
       const googleIdToken = credential?.idToken;
       if (!googleIdToken) throw new Error('Could not obtain Google ID token.');
-
-      const params = new URLSearchParams({ googleIdToken });
-      window.location.href = `modulon://auth?${params.toString()}`;
+      await handoffToDesktop(googleIdToken);
       setDone(true);
     } catch (err) {
       setError(mapAuthError(err));
