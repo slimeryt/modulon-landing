@@ -13,9 +13,41 @@ import {
 } from 'lucide-react';
 import modulonIcon from './assets/icons/Modulon_Icon.png';
 
-const VERSION = 'v0.1.0';
 const GITHUB_REPO = 'slimeryt/modulon-landing';
-const RELEASE_BASE = `https://github.com/${GITHUB_REPO}/releases/latest/download`;
+const FALLBACK_WINDOWS = {
+  url: `https://github.com/${GITHUB_REPO}/releases/download/desktop-v2.0.1/Modulon-Desktop-Setup.exe`,
+  tag: 'desktop-v2.0.1',
+  publishedAt: '2026-09-09T19:47:29Z',
+};
+const ASSET_NAMES = {
+  windows: ['Modulon-Desktop-Setup.exe'],
+  android: ['Modulon.apk'],
+  mac: ['Modulon.dmg'],
+  linux: ['Modulon.AppImage'],
+};
+
+function pickAsset(releases, names) {
+  if (!Array.isArray(releases)) return null;
+  for (const release of releases) {
+    if (release.draft) continue;
+    for (const name of names) {
+      const asset = (release.assets || []).find((item) => item.name === name);
+      if (asset?.browser_download_url) {
+        return {
+          url: asset.browser_download_url,
+          tag: release.tag_name,
+          publishedAt: release.published_at,
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function displayTag(tag) {
+  if (!tag) return 'v2.0.1';
+  return tag.replace(/^desktop-/, '');
+}
 
 // Windows SVG icon
 function WindowsIcon({ className = 'w-6 h-6' }) {
@@ -59,7 +91,7 @@ const PLATFORMS = [
     label: 'Windows',
     sub: 'Windows 10 / 11  ·  x64',
     Icon: WindowsIcon,
-    file: 'Modulon-Setup.exe',
+    file: 'Modulon-Desktop-Setup.exe',
     ext: '.exe',
     available: true,
     primary: true,
@@ -71,7 +103,7 @@ const PLATFORMS = [
     Icon: AndroidIcon,
     file: 'Modulon.apk',
     ext: '.apk',
-    available: true,
+    available: false,
     primary: true,
   },
   {
@@ -95,8 +127,7 @@ const PLATFORMS = [
 ];
 
 function PlatformCard({ platform }) {
-  const { id, label, sub, Icon, file, available, primary } = platform;
-  const href = `${RELEASE_BASE}/${file}`;
+  const { label, sub, Icon, href, available } = platform;
 
   return (
     <div
@@ -161,27 +192,37 @@ function PlatformCard({ platform }) {
 }
 
 export default function DownloadsPage() {
-  const [releaseInfo, setReleaseInfo] = useState(null);
+  const [assets, setAssets] = useState({ windows: FALLBACK_WINDOWS });
 
-  // Try to fetch latest release metadata from GitHub
   useEffect(() => {
-    fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        if (data) setReleaseInfo(data);
+    fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((releases) => {
+        if (!Array.isArray(releases)) return;
+        setAssets({
+          windows: pickAsset(releases, ASSET_NAMES.windows) || FALLBACK_WINDOWS,
+        });
       })
       .catch(() => {});
   }, []);
 
-  const releaseDate = releaseInfo?.published_at
-    ? new Date(releaseInfo.published_at).toLocaleDateString('en-US', {
+  const windows = assets.windows || FALLBACK_WINDOWS;
+  const releaseDate = windows.publishedAt
+    ? new Date(windows.publishedAt).toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'long',
         day: 'numeric',
       })
     : null;
-
-  const releaseTag = releaseInfo?.tag_name || VERSION;
+  const releaseTag = displayTag(windows.tag);
+  const platforms = PLATFORMS.map((platform) => {
+    const asset = assets[platform.id];
+    return {
+      ...platform,
+      href: asset?.url,
+      available: Boolean(asset?.url),
+    };
+  });
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white font-sans selection:bg-white/20">
@@ -221,10 +262,10 @@ export default function DownloadsPage() {
             className="mx-auto mb-6 h-16 w-16 object-contain opacity-90"
           />
           <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-            Download Modulon
+            Download Modulon Desktop
           </h1>
           <p className="mt-4 text-base text-white/45 leading-relaxed max-w-lg mx-auto">
-            Get the native app for your platform. All versions connect to the same Modulon AI.
+            Windows installer for Modulon Desktop. Sign in through the official site — chats stay on this device.
           </p>
 
           {/* Version badge */}
@@ -240,7 +281,7 @@ export default function DownloadsPage() {
 
         {/* Platform grid */}
         <div className="grid gap-4 sm:grid-cols-2">
-          {PLATFORMS.map((p) => (
+          {platforms.map((p) => (
             <PlatformCard key={p.id} platform={p} />
           ))}
         </div>
@@ -269,8 +310,8 @@ export default function DownloadsPage() {
             <li className="flex gap-2">
               <WindowsIcon className="w-3.5 h-3.5 mt-0.5 shrink-0 text-white/25" />
               <span>
-                <span className="text-white/60">Windows —</span> Run the installer. If SmartScreen
-                warns you, click &ldquo;More info → Run anyway&rdquo;. The app auto-creates a Start
+                <span className="text-white/60">Windows —</span> Run <span className="text-white/55">Modulon-Desktop-Setup.exe</span>. If SmartScreen
+                warns you, click &ldquo;More info → Run anyway&rdquo;. The app creates a Start
                 Menu and Desktop shortcut.
               </span>
             </li>
