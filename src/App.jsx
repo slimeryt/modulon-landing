@@ -4,6 +4,7 @@ import ModulonLanding from './ModulonLanding';
 import ChatPage from './ChatPage';
 import DesktopChatPage from './DesktopChatPage';
 import DesktopLoginPage from './DesktopLoginPage';
+import PhoneLoginPage from './PhoneLoginPage';
 import LoginPage from './LoginPage';
 import SignUpPage from './SignUpPage';
 import StatusPage from './StatusPage';
@@ -79,6 +80,7 @@ export default function App() {
           }
         />
         <Route path="/desktop/login" element={<DesktopLoginPage />} />
+        <Route path="/phone/login" element={<PhoneLoginPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/downloads" element={<DownloadsPage />} />
