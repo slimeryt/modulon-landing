@@ -19,6 +19,11 @@ const FALLBACK_WINDOWS = {
   tag: 'desktop-v2.2.4',
   publishedAt: '2026-09-16T18:21:50Z',
 };
+const FALLBACK_ANDROID = {
+  url: `https://github.com/${GITHUB_REPO}/releases/download/android-v1.0.0/Modulon.apk`,
+  tag: 'android-v1.0.0',
+  publishedAt: '2026-09-16T21:00:00Z',
+};
 const ASSET_NAMES = {
   windows: ['Modulon-Desktop-Setup.exe'],
   android: ['Modulon.apk'],
@@ -103,7 +108,7 @@ const PLATFORMS = [
     Icon: AndroidIcon,
     file: 'Modulon.apk',
     ext: '.apk',
-    available: false,
+    available: true,
     primary: true,
   },
   {
@@ -192,7 +197,10 @@ function PlatformCard({ platform }) {
 }
 
 export default function DownloadsPage() {
-  const [assets, setAssets] = useState({ windows: FALLBACK_WINDOWS });
+  const [assets, setAssets] = useState({
+    windows: FALLBACK_WINDOWS,
+    android: FALLBACK_ANDROID,
+  });
 
   useEffect(() => {
     fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases`)
@@ -201,6 +209,7 @@ export default function DownloadsPage() {
         if (!Array.isArray(releases)) return;
         setAssets({
           windows: pickAsset(releases, ASSET_NAMES.windows) || FALLBACK_WINDOWS,
+          android: pickAsset(releases, ASSET_NAMES.android) || FALLBACK_ANDROID,
         });
       })
       .catch(() => {});
@@ -217,10 +226,13 @@ export default function DownloadsPage() {
   const releaseTag = displayTag(windows.tag);
   const platforms = PLATFORMS.map((platform) => {
     const asset = assets[platform.id];
+    const fallback =
+      platform.id === 'windows' ? FALLBACK_WINDOWS : platform.id === 'android' ? FALLBACK_ANDROID : null;
+    const resolved = asset || (platform.available ? fallback : null);
     return {
       ...platform,
-      href: asset?.url,
-      available: Boolean(asset?.url),
+      href: resolved?.url,
+      available: Boolean(resolved?.url),
     };
   });
 
@@ -262,10 +274,10 @@ export default function DownloadsPage() {
             className="mx-auto mb-6 h-16 w-16 object-contain opacity-90"
           />
           <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-            Download Modulon Desktop
+            Download Modulon
           </h1>
           <p className="mt-4 text-base text-white/45 leading-relaxed max-w-lg mx-auto">
-            Windows installer for Modulon Desktop. Sign in through the official site — chats stay on this device.
+            Desktop for Windows and Phone for Android. Sign in through the official site — chats stay on this device.
           </p>
 
           {/* Version badge */}
