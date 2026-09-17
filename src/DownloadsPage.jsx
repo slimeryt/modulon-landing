@@ -20,8 +20,8 @@ const FALLBACK_WINDOWS = {
   publishedAt: '2026-09-16T18:21:50Z',
 };
 const FALLBACK_ANDROID = {
-  url: `https://github.com/${GITHUB_REPO}/releases/download/android-v1.0.0/Modulon.apk`,
-  tag: 'android-v1.0.0',
+  url: `https://github.com/${GITHUB_REPO}/releases/download/android-v1.0.1/Modulon.apk`,
+  tag: 'android-v1.0.1',
   publishedAt: '2026-09-16T21:00:00Z',
 };
 const ASSET_NAMES = {
