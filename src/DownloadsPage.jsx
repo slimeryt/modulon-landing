@@ -15,8 +15,8 @@ import modulonIcon from './assets/icons/Modulon_Icon.png';
 
 const GITHUB_REPO = 'slimeryt/modulon-landing';
 const FALLBACK_WINDOWS = {
-  url: `https://github.com/${GITHUB_REPO}/releases/download/desktop-v2.2.5/Modulon-Desktop-Setup.exe`,
-  tag: 'desktop-v2.2.5',
+  url: `https://github.com/${GITHUB_REPO}/releases/download/desktop-v2.2.6/Modulon-Desktop-Setup.exe`,
+  tag: 'desktop-v2.2.6',
   publishedAt: '2026-09-16T18:21:50Z',
 };
 const FALLBACK_ANDROID = {
