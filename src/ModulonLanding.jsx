@@ -699,6 +699,12 @@ function Footer() {
           >
             {t('footer.cookies')}
           </Link>
+          <Link
+            to="/support"
+            className="text-zinc-500 transition-colors hover:text-zinc-800 dark:text-white/35 dark:hover:text-white/70"
+          >
+            {t('footer.support')}
+          </Link>
         </div>
 
         <div className="flex items-center gap-4">

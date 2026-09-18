@@ -39,6 +39,7 @@ export const CATALOG = {
   'footer.status': 'Status',
   'footer.changelog': 'Changelog',
   'footer.cookies': 'Cookies',
+  'footer.support': 'Support',
 
   // Cookies
   'cookies.title': 'Cookies on Modulon',
