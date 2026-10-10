@@ -1,6 +1,6 @@
 {
-  "version": "1.0.4",
-  "versionCode": 5,
-  "url": "https://github.com/slimeryt/modulon-landing/releases/download/android-v1.0.4/Modulon.apk",
-  "notes": "The power-button assistant is a mini chat. Replies stay in the panel."
+  "version": "1.0.5",
+  "versionCode": 6,
+  "url": "https://github.com/slimeryt/modulon-landing/releases/download/android-v1.0.5/Modulon.apk",
+  "notes": "The assistant opens as a pill and expands while you type."
 }
