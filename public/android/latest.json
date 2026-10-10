@@ -1,6 +1,6 @@
 {
-  "version": "1.0.2",
-  "versionCode": 3,
-  "url": "https://github.com/slimeryt/modulon-landing/releases/download/android-v1.0.2/Modulon.apk",
-  "notes": "In-app APK download and install, settings, and smoother corners."
+  "version": "1.0.3",
+  "versionCode": 4,
+  "url": "https://github.com/slimeryt/modulon-landing/releases/download/android-v1.0.3/Modulon.apk",
+  "notes": "Set Modulon as the Android default assistant. Holding the power button opens the Modulon menu."
 }

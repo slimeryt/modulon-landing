@@ -20,9 +20,9 @@ const FALLBACK_WINDOWS = {
   publishedAt: '2026-09-18T22:45:00Z',
 };
 const FALLBACK_ANDROID = {
-  url: `https://github.com/${GITHUB_REPO}/releases/download/android-v1.0.2/Modulon.apk`,
-  tag: 'android-v1.0.2',
-  publishedAt: '2026-10-10T21:12:00Z',
+  url: `https://github.com/${GITHUB_REPO}/releases/download/android-v1.0.3/Modulon.apk`,
+  tag: 'android-v1.0.3',
+  publishedAt: '2026-10-10T21:30:00Z',
 };
 const ASSET_NAMES = {
   windows: ['Modulon-Desktop-Setup.exe'],
