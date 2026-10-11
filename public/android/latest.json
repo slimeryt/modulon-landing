@@ -1,6 +1,6 @@
 {
-  "version": "1.0.5",
-  "versionCode": 6,
-  "url": "https://github.com/slimeryt/modulon-landing/releases/download/android-v1.0.5/Modulon.apk",
-  "notes": "The assistant opens as a pill and expands while you type."
+  "version": "1.0.6",
+  "versionCode": 7,
+  "url": "https://github.com/slimeryt/modulon-landing/releases/download/android-v1.0.6/Modulon.apk",
+  "notes": "Assistant pill closes fully, the send button stays inside it, and it moves up with the keyboard."
 }
